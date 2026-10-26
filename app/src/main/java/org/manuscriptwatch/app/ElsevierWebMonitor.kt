@@ -47,6 +47,17 @@ object ElsevierWebMonitor {
         }
     }
 
+    /** A tracking site may rewrite its same-origin URL after loading the UUID.
+     * Do not require the UUID query string on every internal navigation.
+     */
+    private fun onExpectedHost(url: String, kind: TrackingKind): Boolean {
+        val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return false
+        val expected = if (kind == TrackingKind.ELSEVIER_HUB)
+            "track.authorhub.elsevier.com" else "authors.elsevier.com"
+        return uri.scheme.equals("https", true) && uri.host.equals(expected, true) &&
+            uri.userInfo == null && uri.port in setOf(-1, 443)
+    }
+
     private suspend fun renderAndRead(browser: WebView, source: TrackingSource): ExtractResult =
         suspendCancellableCoroutine { continuation ->
             val handler = Handler(Looper.getMainLooper())
@@ -69,7 +80,7 @@ object ElsevierWebMonitor {
                     handler.postDelayed({ poll() }, 1_500L)
                     return
                 }
-                if (TrackingKind.fromUrl(current) != source.kind) {
+                if (!onExpectedHost(current, source.kind)) {
                     finish(ExtractResult.NeedsAttention("Tracking page redirected away. Open the link and complete any required sign-in."))
                     return
                 }
@@ -105,7 +116,7 @@ object ElsevierWebMonitor {
             browser.webViewClient = object : WebViewClient() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                     started = true
-                    if (url != null && TrackingKind.fromUrl(url) != source.kind)
+                    if (url != null && !onExpectedHost(url, source.kind))
                         finish(ExtractResult.NeedsAttention("Redirected outside the expected Elsevier tracking page."))
                     super.onPageStarted(view, url, favicon)
                 }
