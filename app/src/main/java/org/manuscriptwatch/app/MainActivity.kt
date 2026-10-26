@@ -297,7 +297,11 @@ class MainActivity : ComponentActivity() {
                 LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
         }
         for (source in links) {
-            content.addView(pillButton("Remove ${source.kind.title}${if (source.folder.isNotBlank()) " (${source.folder})" else ""}") {
+            val lastStatus = source.lastStatus.ifBlank { "Not checked" }
+            content.addView(text("${source.kind.title}: $lastStatus" +
+                if (source.folder.isNotBlank()) " (${source.folder})" else "",
+                12f, color = gray))
+            content.addView(pillButton("Remove ${source.kind.title}") {
                 AlertDialog.Builder(this).setTitle("Remove tracking source?")
                     .setMessage("Remove this saved link from Manuscript Watch? This does not affect the journal website.")
                     .setPositiveButton("Remove") { _, _ ->
