@@ -1,0 +1,18 @@
+.gradle/
+.idea/
+**/build/
+local.properties
+*.iml
+.DS_Store
+
+# Never commit local signing keys, secrets, or installed packages
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+.env
+.env.*
+keystore.properties
+*.apk
+*.aab
