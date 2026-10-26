@@ -97,7 +97,7 @@ object SubmissionStore {
         val sources = TrackingSources.effective(old).toMutableList()
         val updated = endpoint.copy(
             lastStatus = result.status.take(160), lastChecked = now,
-            folder = folder.ifBlank { endpoint.folder }
+            folder = folder.ifBlank { endpoint.folder }, lastError = "", lastAttempted = now
         )
         sources.removeAll { it.url == updated.url }
         sources.add(updated)
@@ -130,6 +130,31 @@ object SubmissionStore {
                 changedCount("Reviewers invited", old.reviewProgress.invited, newProgress.invited)
                 changedCount("Reviewers accepted", old.reviewProgress.accepted, newProgress.accepted)
                 changedCount("Reports received", old.reviewProgress.reports, newProgress.reports)
+            }
+        }
+    }
+
+    /** Store a check error on the exact tracking source, preserving statuses from other sources. */
+    fun recordSourceError(context: Context, id: String, source: TrackingSource, reason: String) = synchronized(lock) {
+        all(context).find { it.id == id }?.let { item ->
+            val sources = TrackingSources.effective(item).toMutableList()
+            val previous = sources.firstOrNull { it.url == source.url } ?: source
+            sources.removeAll { it.url == source.url }
+            sources.add(previous.copy(lastError = reason.take(240), lastAttempted = System.currentTimeMillis()))
+            save(context, item.copy(trackingSources = sources))
+        }
+    }
+
+    /** Record publisher-provided reviewer numbers even when no editorial status is identifiable. */
+    fun observeReviewProgress(context: Context, id: String, source: TrackingSource,
+                              partial: ReviewProgress) = synchronized(lock) {
+        if (partial.isEmpty()) return@synchronized
+        all(context).find { it.id == id }?.let { item ->
+            val progress = item.reviewProgress.merge(partial)
+            if (progress != item.reviewProgress) {
+                val now = System.currentTimeMillis()
+                save(context, item.copy(reviewProgress = progress,
+                    reviewHistory = (item.reviewHistory + ReviewEvent(now, source.kind.title, progress)).takeLast(250)))
             }
         }
     }
@@ -186,6 +211,8 @@ object SubmissionStore {
                 put("kind", source.kind.name); put("url", source.url)
                 put("lastStatus", source.lastStatus); put("lastChecked", source.lastChecked)
                 put("folder", source.folder)
+                put("lastError", source.lastError)
+                put("lastAttempted", source.lastAttempted)
             })
         } })
         put("reviewProgress", reviewProgress.toJson())
@@ -240,7 +267,8 @@ object SubmissionStore {
                         TrackingKind.entries.firstOrNull { it.name == entry.optString("kind") }
                             ?: TrackingKind.fromUrl(url), url,
                         entry.optString("lastStatus"), entry.optLong("lastChecked"),
-                        entry.optString("folder")
+                        entry.optString("folder"),
+                        entry.optString("lastError"), entry.optLong("lastAttempted")
                     )
                 }.getOrNull()
             },
