@@ -38,12 +38,15 @@ data class TrackingSource(
 
 data class ReviewProgress(
     val invited: Int? = null,
+    val invitedAtLeast: Boolean = false,
     val accepted: Int? = null,
     val reports: Int? = null
 ) {
     fun isEmpty() = invited == null && accepted == null && reports == null
+    fun invitedLabel(): String? = invited?.let { "$it${if (invitedAtLeast) "+" else ""}" }
     fun merge(newer: ReviewProgress): ReviewProgress = ReviewProgress(
         invited = newer.invited ?: invited,
+        invitedAtLeast = if (newer.invited != null) newer.invitedAtLeast else invitedAtLeast,
         accepted = newer.accepted ?: accepted,
         reports = newer.reports ?: reports
     )
