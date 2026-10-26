@@ -31,10 +31,10 @@ This pre-release provides the Android source code for an experimental, local-fir
 
 This release marks the **source code** as a development preview. Experimental debug APKs are available under the [GitHub Actions workflow](https://github.com/Orbolato/Submission-Tracker-App/actions/workflows/build-apk.yml), but these are **not stable signed releases**. They may not be able to update an existing installation signed with a different key. **Do not uninstall a working copy just to try a debug APK**, because that will remove locally stored manuscript data and browser sessions.
 
-For build and setup instructions, see the repository [README](README.md) and [phone installation guide](PHONE_INSTALL.md).
+For build and setup instructions, see the repository [README](https://github.com/Orbolato/Submission-Tracker-App#readme) and [phone installation guide](https://github.com/Orbolato/Submission-Tracker-App/blob/main/PHONE_INSTALL.md).
 
 ## Licensing
 
-Copyright (c) 2026 Lucas Orbolato Carvalho. Released under the [MIT License](LICENSE).
+Copyright (c) 2026 Lucas Orbolato Carvalho. Released under the [MIT License](https://github.com/Orbolato/Submission-Tracker-App/blob/main/LICENSE).
 
 Independent project. Not affiliated with, authorized by, or endorsed by ORCID, Elsevier, or Springer Nature.
