@@ -32,6 +32,24 @@ class EditorialManagerDiscoveryTest {
         assertNull(EditorialManagerDiscovery.nextPage("<a href='javascript:submit()'>Next</a>", menu))
     }
 
+    @Test fun recognizesAuthorMenuWithJavaScriptNavigationWithoutCrawlingIt() {
+        val page = """<body><h2>Author Main Menu</h2>
+           <a href='javascript:goToFolder(1)'>Submissions Being Processed</a>
+           <a href='javascript:goToFolder(2)'>Revisions Being Processed</a>
+           <button>Submissions with a Decision</button></body>"""
+        assertTrue(EditorialManagerDiscovery.isMenuPage(page, menu))
+        assertEquals(0, EditorialManagerDiscovery.folders(page, menu).size)
+        val paper = Manuscript(title = "Example", journal = "Example", manuscriptId = "DEMO-001")
+        val answer = EditorialManagerDiscovery.locateFromRenderedMenu(paper, menu, page)
+        assertTrue(answer is EditorialManagerDiscovery.Result.NeedsAttention)
+        assertTrue((answer as EditorialManagerDiscovery.Result.NeedsAttention).reason.contains("JavaScript"))
+    }
+
+    @Test fun recognizesFolderTitleForPassiveCapture() {
+        val page = "<h2>Submissions Being Processed</h2><table><tr><th>Status</th></tr></table>"
+        assertEquals("Submissions Being Processed", EditorialManagerDiscovery.folderTitle(page))
+    }
+
     @Test fun rejectsPretendEditorialManagerHost() {
         assertTrue(!EditorialManagerDiscovery.isEditorialManager("https://www.editorialmanager.com.evil.invalid/demo/"))
     }
