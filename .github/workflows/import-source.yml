@@ -1,0 +1,38 @@
+name: Import Manuscript Watch v0.1.8 source
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'bootstrap/source.tar.xz.b64'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Extract source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 --decode bootstrap/source.tar.xz.b64 > /tmp/manuscript-watch-source.tar.xz
+          tar -xJf /tmp/manuscript-watch-source.tar.xz -C .
+          test -f app/build.gradle.kts
+          test -f app/src/main/java/org/manuscriptwatch/app/SpringerWebMonitor.kt
+          test -f .github/workflows/build-apk.yml
+          rm -rf bootstrap
+      - name: Publish extracted source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m 'Import Manuscript Watch v0.1.8 Android source'
+          git push origin HEAD:main
