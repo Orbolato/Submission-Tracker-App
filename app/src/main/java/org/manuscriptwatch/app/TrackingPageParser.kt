@@ -15,7 +15,7 @@ object TrackingPageParser {
     private val progressPatterns = mapOf(
         "invited" to listOf("reviewers invited", "reviewer invitations sent", "invitations sent", "reviewers contacted"),
         "accepted" to listOf("reviewers accepted", "reviewers agreed", "invitations accepted", "reviewers agreed to review"),
-        "reports" to listOf("reviews completed", "reviews received", "reviewer reports received", "reports received", "completed reviews")
+        "reports" to listOf("reviews completed", "reviews received", "reviewer reports received", "reviewer report(s) received", "reviewer report received", "review reports received", "review report received", "reports received", "completed reviews")
     )
 
     fun reviewProgress(html: String): ReviewProgress? {
