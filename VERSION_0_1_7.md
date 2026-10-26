@@ -7,7 +7,7 @@
 ## Springer Nature changes
 
 - Saved HTTPS deep links on `submission.springernature.com/submission-details/<UUID>` are handled by `SpringerWebMonitor` rather than a raw `HttpURLConnection` request.
-- During a scheduled or manual check, it creates a WebView on Android's main thread, shares the app's existing WebView cookies and DOM storage, permits site JavaScript to render, polls the exact submission page, and extracts **explicitly labelled** current status/stage information.
+- During a scheduled or manual check, it creates a WebView on Android's main thread, shares the app's existing WebView cookies and DOM storage, permits site JavaScript to render, polls the exact submission page, and extracts **explicitly labeled** current status/stage information.
 - The checker ignores OAuth redirects and does not read credentials or automatically sign in. It never records a status change when the session expires or a page is ambiguous. Background checks have a 30-second timeout and report a readable error if they cannot extract the status.
 - The interactive journal browser's **Use page** action also reads a smaller copy of the rendered DOM, excluding scripts and styles.
 - Existing Elsevier and other site handling in `SiteMonitor` is unchanged.
