@@ -1,100 +1,86 @@
 # Manuscript Watch
 
-**An experimental Android app for monitoring journal manuscript submission statuses.**
-
-Manuscript Watch helps researchers keep track of submitted and revised papers across editorial websites from one on-device dashboard. It records status changes and can display local Android notifications when a change is detected.
-
-[![Android CI](https://github.com/Orbolato/Submission-Tracker-App/actions/workflows/build-apk.yml/badge.svg)](https://github.com/Orbolato/Submission-Tracker-App/actions/workflows/build-apk.yml)
+[![Android APK build and unit tests](https://github.com/Orbolato/Submission-Tracker-App/actions/workflows/build-apk.yml/badge.svg)](https://github.com/Orbolato/Submission-Tracker-App/actions/workflows/build-apk.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> **Development status: experimental v0.1.8.** The project builds and its included unit tests run in GitHub Actions. Publisher-specific sign-in, JavaScript rendering, and Android background restrictions may prevent successful checks. Always confirm important editorial decisions directly with the publisher.
+**Manuscript Watch** is an experimental, open-source Android app for tracking academic journal submissions and revisions across editorial websites. It helps researchers keep manuscript statuses, check history, and status-change notifications in one place.
+
+The current implementation focuses on **Springer Nature** and **Elsevier / Editorial Manager**. Journal interfaces, login sessions, and access policies vary. A successful build does not mean that monitoring is reliable for every journal or on every Android device.
 
 ## Features
 
-- **Manuscript dashboard:** Manage manuscript titles, journals, IDs, status-page links, and current statuses.
-- **Status history:** Retain timestamped changes for each tracked manuscript.
-- **Website monitoring:** Schedule local checks using Android WorkManager; choose a check interval from 1 to 24 hours.
-- **Springer Nature:** A best-effort WebView checker reads JavaScript-rendered individual submission-detail pages using the app's existing signed-in WebView session.
-- **Elsevier and other editorial portals:** A general HTTPS/HTML checker looks for manuscript-specific statuses in author pages. Coverage depends on each publisher's page structure.
-- **Notifications:** Android alerts for detected website status changes. No email monitoring is included.
-- **Optional ORCID credential vault:** User-approved AES-256-GCM encryption with an Android Keystore key and user-triggered filling on verified ORCID pages. The app does **not** submit passwords automatically in the background.
-- **Local-first storage:** Manuscript data and session information stay on the device; the app does not require a dedicated server or app account.
+- Track manuscript titles, journals, identifiers, submission links, and current statuses.
+- Open a journal's website inside the app and save its manuscript-status page with **Track page**, without entering HTML or CSS selectors.
+- Read supported status pages, including JavaScript-rendered Springer Nature submission-detail pages, using the app's authenticated WebView session.
+- Preserve a local status history and send Android notifications when a website check detects a change.
+- Schedule checks with Android WorkManager (selectable intervals of 1, 3, 6, 12, or 24 hours; default: 3 hours).
+- Optionally store ORCID credentials encrypted with Android Keystore for **user-triggered** autofill on verified ORCID login pages.
+- Store manuscript information locally, without an application account, analytics service, or email-monitoring integration.
 
-## Supported environment
+## Current support and limitations
 
-- Android 8.0 or newer (API 26+).
-- Android Studio with Android SDK 35 and JDK 17, or the provided GitHub Actions build workflow.
-- A legitimate author account and permission to access each journal's editorial website.
+| Website or feature | Current approach | Limitations |
+|---|---|---|
+| Springer Nature submissions | WebView/JavaScript monitoring of individual `submission-details/` pages | Depends on an authorized session, the site's page structure, and Android background execution |
+| Elsevier / Editorial Manager | Authenticated HTML retrieval and manuscript-specific status extraction | Journal-specific layouts, redirects, or JavaScript pages may not work |
+| Other editorial systems | Experimental generic HTML checking | No verified publisher-specific adapter |
+| ORCID | Interactive login on publisher websites; optional encrypted local credentials | ORCID does not provide a universal API for private submission statuses or unattended login |
 
-**Publisher coverage is experimental, not certified.** Springer Nature and Elsevier have not sponsored, endorsed, or authorized this independent project.
+**Important:** This project does not automatically discover manuscripts from ORCID. Website access requires you to sign in through each authorized journal portal. Browser sessions may expire. CAPTCHA, multi-factor authentication, and other interactive steps are not bypassed. The app does not silently submit saved ORCID credentials.
+
+Manuscript status monitoring is **best effort**. Android may delay periodic checks, and websites can restrict automated access. Verify important decisions and deadlines directly with the journal. Use polling responsibly and respect publisher terms.
+
+## Requirements
+
+- Android 8.0 (API 26) or newer
+- Android Studio with Android SDK 35 and JDK 17 for local builds
+- Gradle 8.9 (configured for the project)
+
+## Build from source
+
+Clone the repository and open it as an Android Studio project:
+
+```bash
+git clone https://github.com/Orbolato/Submission-Tracker-App.git
+```
+
+In Android Studio, let Gradle synchronize and run the `app` configuration on an emulator or a connected Android device. On Windows, you can build the debug APK using:
+
+```powershell
+.\gradlew.bat assembleDebug
+```
+
+The resulting file is `app/build/outputs/apk/debug/app-debug.apk`.
+
+The [Build Android APK workflow](https://github.com/Orbolato/Submission-Tracker-App/actions/workflows/build-apk.yml) runs unit tests and builds a downloadable **debug APK**. Find it in the successful run's **Artifacts** section. This is not a signed production release.
+
+**Updating an installed app:** debug builds from GitHub and your PC may use different signing keys. An APK signed by a different key cannot replace an existing installation while preserving app data. Do not uninstall an existing installation just to force an update: local manuscript records, status history, encrypted credentials, and publisher sessions would be lost. See [phone installation instructions](PHONE_INSTALL.md).
 
 ## Getting started
 
-1. Add a manuscript and the journal's stable HTTPS login URL.
-2. Tap **Open journal** and complete the publisher's normal sign-in process. Use ORCID where the publisher supports it.
-3. Navigate to the manuscript's actual status page and tap **Track page**.
-4. Tap **Check**, then **Refresh**, to see whether the app successfully recognized the current status.
-5. Select the background check interval and allow Android notifications if desired.
+1. Select **Add paper** and enter the manuscript title, journal, manuscript ID, and journal sign-in URL.
+2. Select **Open journal**, authenticate with the journal, and navigate to the page displaying the manuscript status.
+3. Select **Track page** once the status is visible.
+4. Return to the dashboard and select **Check** to verify extraction. You can also set a periodic check interval.
 
-You do **not** need to enter CSS selectors, inspect HTML, or share your ORCID password to use normal website monitoring.
-
-### Build and test with Android Studio
-
-Open the repository root (the directory containing `settings.gradle.kts`) and build with JDK 17 and Android SDK 35:
-
-```powershell
-.\gradlew.bat testDebugUnitTest assembleDebug
-```
-
-The debug APK appears under `app/build/outputs/apk/debug/app-debug.apk`.
-
-### Build with GitHub Actions
-
-Use [Build Android APK](https://github.com/Orbolato/Submission-Tracker-App/actions/workflows/build-apk.yml) and download the debug APK from a successful run's **Artifacts** section. See [PHONE_INSTALL.md](PHONE_INSTALL.md) for installation and update precautions.
-
-**Signing warning:** GitHub-hosted debug builds may use a different signing key from Android Studio on your PC. An APK with a different signature cannot update an installed copy of Manuscript Watch in place. **Do not uninstall** a working installation merely to bypass this limitation: uninstalling removes local manuscript records, status history, and stored publisher sessions.
-
-## How monitoring works
-
-| Component | Function |
-|---|---|
-| `MainActivity.kt` | Manuscript dashboard and configuration |
-| `BrowserActivity.kt` | Embedded browser for interactive journal sign-in and page selection |
-| `SubmissionStore.kt` | Local manuscript records and status history |
-| `SpringerWebMonitor.kt` | Best-effort JavaScript-rendered Springer Nature status checks |
-| `SiteMonitor.kt` | HTML-based status checks for Elsevier and other portals |
-| `StatusExtractor.kt` | Manuscript-scoped status parsing and ambiguous-result handling |
-| `MonitorWorker.kt` | Scheduled and manual WorkManager checks |
-| `SecureOrcidCredentials.kt` | Optional encrypted, user-triggered ORCID credential storage |
-
-## Important limitations
-
-- **ORCID sign-in is not a universal submissions API.** Manuscripts must be added manually, and each publisher controls its own account and session.
-- **Session persistence is not guaranteed.** Publishers can expire cookies, require CAPTCHA or multifactor authentication, or reject embedded browsers.
-- **Monitoring is best effort.** JavaScript-heavy pages and publisher layout changes may prevent status extraction. The app should report a failed check rather than invent a status.
-- **Background execution is not continuous.** Android and device manufacturers can delay or suspend scheduled checks.
-- **No production release or security certification.** This repository is an early prototype, not a substitute for checking an official editorial portal.
+If the app cannot identify an unambiguous status or the login session expires, it displays a message instead of guessing. Track original submissions and revisions individually when the publisher assigns distinct pages or identifiers.
 
 ## Privacy and security
 
-- Do not include credentials, access tokens, authentication cookies, private manuscript URLs, or confidential paper details in GitHub issues or commits.
-- Saved ORCID credentials are optional and encrypted at rest using Android Keystore. They are only filled after an explicit action on trusted ORCID pages.
-- Manuscript metadata is stored in app-private storage, but does not have a separate app-level encryption key; Android device encryption and a screen lock are recommended.
-- Cloud backup of the app's data is disabled. Uninstalling the app will remove locally stored records.
-- Publisher site-access terms and human-verification requirements must be respected.
+- The app uses on-device app-private storage. Manuscript metadata is **not separately encrypted**; protect your device with a screen lock and Android device encryption.
+- ORCID credential storage is optional and uses AES-GCM encryption with an Android Keystore key. Saved credentials are only filled after a user action on verified ORCID pages, not by automatic background login.
+- Publisher sessions use WebView cookie storage, which is independent of Chrome.
+- App backups are disabled. There is no synchronization server or email monitoring.
+- Never include private manuscript IDs, tracking URLs, passwords, cookies, access tokens, or keystores in issues, commits, or shared screenshots.
 
-To report a possible security issue, see [SECURITY.md](SECURITY.md). See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidance.
+For vulnerability reporting, see [SECURITY.md](SECURITY.md).
 
-## Documentation
+## Development and contributing
 
-- [Phone installation and APK signing](PHONE_INSTALL.md)
-- [Springer authentication notes](SPRINGER_AUTH.md)
-- [ORCID and Android Password Manager](PASSWORD_MANAGER.md)
-- [Version 0.1.8 details](VERSION_0_1_8.md)
-- [Springer rendered-page monitoring details](VERSION_0_1_7.md)
+The project is a research-oriented prototype and is **not affiliated with or endorsed by Springer Nature, Elsevier, ORCID, or any publisher**. Its core source is under `app/src/main/java/org/manuscriptwatch/app/`, with tests under `app/src/test/`.
+
+Contributions and reproducible, **redacted** bug reports are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md), and read the [v0.1.8 release notes](RELEASE_NOTES_v0.1.8.md) for current scope. Previous engineering notes are retained in the version-specific Markdown files.
 
 ## License
 
 Released under the [MIT License](LICENSE). Copyright (c) 2026 Lucas Orbolato Carvalho.
-
-This project is independent of ORCID, Elsevier, and Springer Nature. Publisher names are used solely to describe website compatibility.
