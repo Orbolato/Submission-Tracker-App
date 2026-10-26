@@ -85,6 +85,7 @@ object SpringerWebMonitor {
         var reading = false
         var completed = false
         var lastReason = "Springer content has not rendered its current status."
+        var lastProgress: ReviewProgress? = null
         var polls = 0
 
         fun finish(result: ExtractResult) {
@@ -135,14 +136,16 @@ object SpringerWebMonitor {
                         finish(parsed)
                         return@evaluateJavascript
                     }
-                    lastReason = (parsed as ExtractResult.NeedsAttention).reason
+                    val issue = parsed as ExtractResult.NeedsAttention
+                    lastReason = issue.reason
+                    lastProgress = issue.reviewProgress ?: lastProgress
                 } else {
                     lastReason = "Springer page is not ready or its DOM is too large to inspect safely."
                 }
                 polls++
                 if (polls >= 16) {
                     finish(ExtractResult.NeedsAttention(
-                        "Springer page loaded, but a current status was not identified. $lastReason"
+                        "Springer page loaded, but a current status was not identified. $lastReason", lastProgress
                     ))
                 } else {
                     handler.postDelayed({ poll() }, POLL_MS)
