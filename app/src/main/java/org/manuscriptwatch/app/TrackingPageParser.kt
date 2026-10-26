@@ -63,11 +63,13 @@ object TrackingPageParser {
         if (Regex("(?i)captcha|verify you are human|access denied").containsMatchIn(text)) {
             return ExtractResult.NeedsAttention("Tracking website requires manual verification.")
         }
-        val status = explicitStatus(doc)
+        val status = explicitStatus(doc) ?: activeTimelineStage(doc)
         val progress = reviewProgress(html)
         if (status != null) return ExtractResult.Found(status, progress)
         return ExtractResult.NeedsAttention(
-            "Tracking page loaded, but no clearly labeled current status was found. Open the page in the app to inspect it."
+            "Tracking page loaded, but no clearly labeled current status was found. " +
+                "Try opening it with Open tracking page and select Track page after it renders.",
+            progress
         )
     }
 
@@ -94,6 +96,26 @@ object TrackingPageParser {
             }
         }
         return null
+    }
+
+    /** Only a current/active milestone can determine the stage; historical items are not current. */
+    private fun activeTimelineStage(doc: Document): String? {
+        val recognized = setOf(
+            "submitted to journal", "with editor", "under review", "in peer review",
+            "peer review", "required reviews completed", "decision in process",
+            "revision requested", "major revision", "minor revision", "accepted",
+            "article accepted", "in production", "proofs", "proof correction",
+            "published", "reviewers invited", "reviewer invited"
+        )
+        val active = doc.select(
+            "[aria-current=step], [aria-current=true], [data-current=true], " +
+                "[data-state=active], [data-status=current], [class*=current-step], " +
+                "[class*=active-stage]"
+        ).mapNotNull { node ->
+            val label = node.text().trim().replace(Regex("\\s+"), " ")
+            label.takeIf { it.length in 4..50 && label.lowercase() in recognized }
+        }.distinct()
+        return active.singleOrNull()
     }
 
     private fun reasonable(value: String): Boolean {
