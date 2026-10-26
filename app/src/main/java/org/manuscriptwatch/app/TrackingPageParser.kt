@@ -59,6 +59,48 @@ object TrackingPageParser {
         return progress.takeUnless { it.isEmpty() }
     }
 
+    /**
+     * SNAPP's author-facing reviewer summary uses sentences rather than labeled fields:
+     * "The editor has invited 6 reviewer(s)"
+     * "There is 1 reviewer(s) that has accepted to review your manuscript"
+     *
+     * Only count statements explicitly present in the manuscript's own detail page.
+     * In particular, narrative mentioning "reports" does NOT establish that any
+     * reviews have been received; unknown is different from zero.
+     */
+    fun springerReviewProgress(html: String): ReviewProgress? {
+        val generic = reviewProgress(html)
+        val doc = Jsoup.parse(html)
+        val invitedSentence = Regex(
+            """(?i)^the editor has invited\s+(\d{1,3})(\+?)\s+reviewer(?:\(s\)|s)?(?:\s+to review(?:\s+your manuscript)?)?\.?$"""
+        )
+        val acceptedSentence = Regex(
+            """(?i)^there (?:is|are)\s+(\d{1,3})\s+reviewer(?:\(s\)|s)?\s+(?:that|who)\s+(?:has|have)\s+accepted(?:\s+to review(?:\s+your manuscript)?)?\.?$"""
+        )
+        var invited: Int? = null
+        var atLeast = false
+        var accepted: Int? = null
+
+        // Prefer compact list items/paragraphs. Avoid scanning whole-page text for
+        // bare numbers, which could refer to an unrelated submission or help text.
+        for (node in doc.select("li,p,span,div")) {
+            val text = node.text().trim().replace(Regex("""\s+"""), " ")
+            if (text.length !in 25..170) continue
+            val invitedMatch = invitedSentence.matchEntire(text)
+            if (invitedMatch != null) {
+                invited = invitedMatch.groupValues[1].toInt()
+                atLeast = invitedMatch.groupValues[2] == "+"
+            }
+            val acceptedMatch = acceptedSentence.matchEntire(text)
+            if (acceptedMatch != null) {
+                accepted = acceptedMatch.groupValues[1].toInt()
+            }
+        }
+        val sentences = ReviewProgress(invited = invited, invitedAtLeast = atLeast, accepted = accepted)
+        val combined = generic?.merge(sentences) ?: sentences
+        return combined.takeUnless { it.isEmpty() }
+    }
+
     fun elsevierTracking(html: String, url: String): ExtractResult {
         val kind = TrackingKind.fromUrl(url)
         if (kind != TrackingKind.ELSEVIER_HUB && kind != TrackingKind.ELSEVIER_PRODUCTION) {
