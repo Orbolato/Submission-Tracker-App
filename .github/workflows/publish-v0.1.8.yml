@@ -1,0 +1,42 @@
+name: Publish Manuscript Watch v0.1.8 pre-release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-v0.1.8.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate pre-release contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f LICENSE
+          test -f RELEASE_NOTES_0_1_8.md
+          test -f app/src/main/java/org/manuscriptwatch/app/SpringerWebMonitor.kt
+          grep -Fq 'versionName = "0.1.8"' app/build.gradle.kts
+
+      - name: Create source-only pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v0.1.8 > /dev/null 2>&1; then
+            echo "v0.1.8 release already exists; no changes made."
+          else
+            gh release create v0.1.8 \
+              --target "${GITHUB_SHA}" \
+              --title "Manuscript Watch v0.1.8 (Experimental Pre-release)" \
+              --notes-file RELEASE_NOTES_0_1_8.md \
+              --prerelease
+          fi
