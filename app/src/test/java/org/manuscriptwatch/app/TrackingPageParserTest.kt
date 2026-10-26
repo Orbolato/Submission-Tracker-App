@@ -93,6 +93,45 @@ class TrackingPageParserTest {
         assertEquals("Under Review", result.status)
     }
 
+    @Test fun springerNarrativeInvitedAndAcceptedCountsDoNotImplyCompletedReviews() {
+        val html = """
+          <html><body><section>
+          <h2>News about your peer review process</h2>
+          <ul>
+            <li>The editor has invited 6 reviewer(s)</li>
+            <li>There is 1 reviewer(s) that has accepted to review your manuscript</li>
+          </ul>
+          <p>After the editor has collated and reviewed all the reports they need,
+          you'll be notified about their decision.</p>
+          </section></body></html>
+        """.trimIndent()
+        val progress = TrackingPageParser.springerReviewProgress(html)!!
+        assertEquals(6, progress.invited)
+        assertEquals("6", progress.invitedLabel())
+        assertEquals(1, progress.accepted)
+        assertNull(progress.reports)
+    }
+
+    @Test fun springerCountsIncludeReceivedReportsOnlyWhenExplicitlyDisplayed() {
+        val html = """
+          <html><body><ul>
+            <li>The editor has invited 6 reviewer(s)</li>
+            <li>There are 2 reviewers who have accepted to review your manuscript</li>
+            <li>Reviews received: 1</li>
+          </ul></body></html>
+        """.trimIndent()
+        val progress = TrackingPageParser.springerReviewProgress(html)!!
+        assertEquals(6, progress.invited)
+        assertEquals(2, progress.accepted)
+        assertEquals(1, progress.reports)
+    }
+
+    @Test fun springerNarrativeUnrelatedNumbersDoNotCountAsReviewerProgress() {
+        val html = "<body><p>6 other journals invited reviewers last year.</p>" +
+            "<p>Our support FAQ says there is 1 reviewer who accepted a review in another system.</p></body>"
+        assertNull(TrackingPageParser.springerReviewProgress(html))
+    }
+
     @Test fun rejectsUntrustedSchemeForExtraLinks() {
         assertTrue(!TrackingSources.isSupportedUrl("http://track.authorhub.elsevier.com/?uuid=demo"))
         assertTrue(!TrackingSources.isSupportedUrl("https://person@track.authorhub.elsevier.com/?uuid=demo"))
