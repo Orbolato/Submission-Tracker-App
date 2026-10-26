@@ -23,6 +23,10 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Browses journal websites and lets the user save a *status-list* URL, not an OAuth redirect.
@@ -34,6 +38,7 @@ class BrowserActivity : ComponentActivity() {
     private lateinit var primary: WebView
     private lateinit var pageHint: TextView
     private val popupStack = mutableListOf<WebView>()
+    private var folderScanRunning = false
 
     private fun activeWebView(): WebView = popupStack.lastOrNull() ?: primary
 
@@ -107,8 +112,10 @@ class BrowserActivity : ComponentActivity() {
                 if (!html.isNullOrEmpty() &&
                     EditorialManagerDiscovery.isMenuPage(html, savedUrl)) {
                     SubmissionStore.setEditorialMenu(this, record.id, savedUrl)
-                    Toast.makeText(this, "Editorial Manager Author Main Menu saved. The app will check accessible manuscript folders.", Toast.LENGTH_LONG).show()
-                    finish()
+                    val found = EditorialManagerDiscovery.folders(html, savedUrl).size
+                    pageHint.text = "Author Main Menu saved. $found safe folder links found. " +
+                        "Tap Scan folders to search now, or browse a folder manually if its navigation uses JavaScript."
+                    Toast.makeText(this, "Author Main Menu saved. Tap Scan folders to look for this paper.", Toast.LENGTH_LONG).show()
                     return@evaluateJavascript
                 }
                 SubmissionStore.addTrackingSource(this, record.id, savedUrl)
@@ -144,6 +151,12 @@ class BrowserActivity : ComponentActivity() {
             }
         }
         outer.addView(toolbar)
+        outer.addView(Button(this).apply {
+            text = "Scan Editorial Manager folders"
+            textSize = 12f
+            isAllCaps = false
+            setOnClickListener { scanEditorialFolders() }
+        }, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
         outer.addView(Button(this).apply {
             text = "Fill saved ORCID (official ORCID pages only)"
             textSize = 11f
@@ -181,6 +194,96 @@ class BrowserActivity : ComponentActivity() {
             JournalPageClassifier.PageKind.INVALID ->
                 "Unsupported page. Open an HTTPS journal page."
         }
+    }
+
+    /** User-initiated, read-only discovery from the DOM of the actual signed-in Author Main Menu. */
+    private fun scanEditorialFolders() {
+        val recordId = intent.getStringExtra("manuscriptId") ?: return
+        val view = activeWebView()
+        val menuUrl = view.url.orEmpty()
+        if (!EditorialManagerDiscovery.isEditorialManager(menuUrl)) {
+            Toast.makeText(this, "Open the Editorial Manager Author Main Menu first.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (folderScanRunning) return
+        val manuscript = SubmissionStore.all(this).find { it.id == recordId } ?: return
+        view.evaluateJavascript(
+            """(function(){
+                if (!document.body) return '';
+                var c=document.body.cloneNode(true);
+                c.querySelectorAll('script,style,svg,noscript').forEach(function(e){e.remove();});
+                var h=c.outerHTML;return h.length<=1700000?h:'';
+            })()""".trimIndent()
+        ) { result ->
+            val html = runCatching { JSONTokener(result).nextValue() as? String }.getOrNull()
+            if (html.isNullOrEmpty()) {
+                pageHint.text = "The author menu was not readable yet. Let it load and tap Scan folders again."
+                return@evaluateJavascript
+            }
+            if (!EditorialManagerDiscovery.isMenuPage(html, menuUrl)) {
+                pageHint.text = "Open the Author Main Menu before scanning. The current page does not show recognizable folders."
+                return@evaluateJavascript
+            }
+            SubmissionStore.setEditorialMenu(this, recordId, menuUrl)
+            folderScanRunning = true
+            pageHint.text = "Searching accessible author folders for the selected manuscript..."
+            lifecycleScope.launch {
+                val outcome = withContext(Dispatchers.IO) {
+                    EditorialManagerDiscovery.locateFromRenderedMenu(manuscript, menuUrl, html)
+                }
+                folderScanRunning = false
+                when (outcome) {
+                    is EditorialManagerDiscovery.Result.Located -> {
+                        val found = outcome.value
+                        val endpoint = TrackingSource(TrackingKind.EDITORIAL_MANAGER, found.url, folder = found.folder)
+                        SubmissionStore.observeSource(this@BrowserActivity, recordId,
+                            endpoint, found.status, found.folder)
+                            .forEach { AppNotifications.notifyChange(this@BrowserActivity, it) }
+                        pageHint.text = "Found manuscript in ${found.folder}. Status: ${found.status.status}."
+                        Toast.makeText(this@BrowserActivity, "Manuscript located in ${found.folder}", Toast.LENGTH_LONG).show()
+                    }
+                    is EditorialManagerDiscovery.Result.NeedsAttention -> {
+                        pageHint.text = outcome.reason
+                    }
+                }
+            }
+        }
+    }
+
+    /** Automatically recognize a manuscript on a folder page that the author opens manually.
+     * This is a safe fallback for JavaScript/POST navigation that cannot be crawled with GET.
+     */
+    private fun inspectVisitedEditorialFolder(view: WebView, pageUrl: String) {
+        if (!EditorialManagerDiscovery.isEditorialManager(pageUrl)) return
+        val recordId = intent.getStringExtra("manuscriptId") ?: return
+        val manuscript = SubmissionStore.all(this).find { it.id == recordId } ?: return
+        view.postDelayed({
+            if (view.url != pageUrl || isFinishing || isDestroyed) return@postDelayed
+            view.evaluateJavascript(
+                """(function(){
+                    if (!document.body) return '';
+                    var c=document.body.cloneNode(true);
+                    c.querySelectorAll('script,style,svg,noscript').forEach(function(e){e.remove();});
+                    var h=c.outerHTML;return h.length<=1700000?h:'';
+                })()""".trimIndent()
+            ) { encoded ->
+                if (view.url != pageUrl) return@evaluateJavascript
+                val html = runCatching { JSONTokener(encoded).nextValue() as? String }.getOrNull()
+                    ?: return@evaluateJavascript
+                if (EditorialManagerDiscovery.isMenuPage(html, pageUrl)) {
+                    SubmissionStore.setEditorialMenu(this, recordId, pageUrl)
+                    return@evaluateJavascript
+                }
+                val parsed = StatusExtractor.extract(html, manuscript.manuscriptId, "", pageUrl)
+                if (parsed is ExtractResult.Found) {
+                    val folder = EditorialManagerDiscovery.folderTitle(html)
+                    val endpoint = TrackingSource(TrackingKind.EDITORIAL_MANAGER, pageUrl, folder = folder)
+                    SubmissionStore.observeSource(this, recordId, endpoint, parsed, folder)
+                        .forEach { AppNotifications.notifyChange(this, it) }
+                    pageHint.text = "Manuscript recognized in ${folder.ifBlank { "an Editorial Manager folder" }}: ${parsed.status}."
+                }
+            }
+        }, 1800L)
     }
 
     /** User-triggered only; never inject passwords into a publisher or arbitrary redirect. */
@@ -253,7 +356,10 @@ class BrowserActivity : ComponentActivity() {
                 // Auth providers can set cookies during redirects or popup completion.
                 // Persist them, but never log or expose cookie contents.
                 CookieManager.getInstance().flush()
-                if (view === activeWebView() && url != null) updateHint(url)
+                if (view === activeWebView() && url != null) {
+                    updateHint(url)
+                    inspectVisitedEditorialFolder(view, url)
+                }
                 super.onPageFinished(view, url)
             }
             override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, errorResponse: WebResourceResponse?) {
