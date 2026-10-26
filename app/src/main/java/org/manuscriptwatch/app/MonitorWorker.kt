@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit
 class MonitorWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val chosenId = inputData.getString("onlyId")
+        val chosenSourceUrl = inputData.getString("onlySourceUrl")
         val items = SubmissionStore.all(applicationContext).filter { chosenId == null || it.id == chosenId }
         for (item in items) {
             if (isStopped) break
@@ -24,7 +25,7 @@ class MonitorWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             var discovered: EditorialManagerDiscovery.Found? = null
             val isEditorial = listOf(item.editorialMenuUrl, item.journalUrl, item.statusUrl)
                 .any { EditorialManagerDiscovery.isEditorialManager(it) }
-            if (isEditorial) {
+            if (isEditorial && chosenSourceUrl == null) {
                 when (val discovery = EditorialManagerDiscovery.locate(item)) {
                     is EditorialManagerDiscovery.Result.Located -> {
                         discovered = discovery.value
@@ -39,7 +40,7 @@ class MonitorWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 }
             }
             val sources = TrackingSources.effective(item)
-            for (source in sources.take(8)) {
+            for (source in sources.take(8).filter { chosenSourceUrl == null || it.url == chosenSourceUrl }) {
                 if (isStopped) break
                 // A newly discovered folder supersedes the old Editorial Manager folder.
                 if (source.kind == TrackingKind.EDITORIAL_MANAGER && discovered != null) continue
@@ -59,7 +60,13 @@ class MonitorWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                             .forEach { AppNotifications.notifyChange(applicationContext, it) }
                         found = true
                     }
-                    is ExtractResult.NeedsAttention -> errors += "${source.kind.title}: ${result.reason}"
+                    is ExtractResult.NeedsAttention -> {
+                        result.reviewProgress?.let {
+                            SubmissionStore.observeReviewProgress(applicationContext, item.id, source, it)
+                        }
+                        SubmissionStore.recordSourceError(applicationContext, item.id, source, result.reason)
+                        errors += "${source.kind.title}: ${result.reason}"
+                    }
                 }
             }
             if (!found) {
@@ -83,12 +90,13 @@ object MonitorScheduler {
             WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request
         )
     }
-    fun checkNow(context: Context, id: String? = null) {
+    fun checkNow(context: Context, id: String? = null, sourceUrl: String? = null) {
         val constraint = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
         val request = OneTimeWorkRequestBuilder<MonitorWorker>()
             .setConstraints(constraint)
             .apply {
-                if (id != null) setInputData(androidx.work.workDataOf("onlyId" to id))
+                if (id != null) setInputData(androidx.work.workDataOf(
+                    "onlyId" to id, "onlySourceUrl" to sourceUrl))
             }.build()
         WorkManager.getInstance(context).enqueue(request)
     }
