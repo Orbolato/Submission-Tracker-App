@@ -138,6 +138,16 @@ class MainActivity : ComponentActivity() {
             Line(text(item.title, 16f, bold = true), c, 5)
             Line(text(item.manuscriptId, 12f, color = gray), c, 3)
             Line(text(item.currentStatus, 17f, bold = true, color = statusColor(item.currentStatus)), c, 12)
+            val count = TrackingSources.effective(item).size
+            Line(text("$count tracking source${if (count == 1) "" else "s"}" +
+                if (item.currentFolder.isNotBlank()) " · Folder: ${item.currentFolder}" else "",
+                11f, color = gray), c, 4)
+            if (!item.reviewProgress.isEmpty()) {
+                val r = item.reviewProgress
+                val details = listOfNotNull(r.invited?.let { "Invited: $it" },
+                    r.accepted?.let { "Accepted: $it" }, r.reports?.let { "Reports: $it" })
+                Line(text("Peer review · ${details.joinToString("  |  ")}", 12f, color = teal), c, 7)
+            }
             val checked = if (item.lastChecked == 0L) "Not checked yet" else
                 "Last observation: ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(item.lastChecked))}"
             Line(text(checked, 11f, color = gray), c, 3)
@@ -151,7 +161,8 @@ class MainActivity : ComponentActivity() {
             topButtons.addView(pillButton("History") { history(item) }, LinearLayout.LayoutParams(0, -2, 1f))
             c.addView(topButtons, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(9) })
             val bottomButtons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            bottomButtons.addView(pillButton("Edit / update") { editManuscript(item) }, LinearLayout.LayoutParams(0, -2, 1f))
+            bottomButtons.addView(pillButton("Tracking links") { manageTrackingLinks(item) }, LinearLayout.LayoutParams(0, -2, 1f))
+            bottomButtons.addView(pillButton("Edit") { editManuscript(item) }, LinearLayout.LayoutParams(0, -2, 1f))
             bottomButtons.addView(pillButton("Remove") { confirmRemove(item) }, LinearLayout.LayoutParams(0, -2, 1f))
             c.addView(bottomButtons)
             container.addView(c, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(11) })
@@ -252,12 +263,67 @@ class MainActivity : ComponentActivity() {
 
     private fun history(item: Manuscript) {
         val data = SubmissionStore.all(this).find { it.id == item.id } ?: item
-        val message = if (data.history.isEmpty()) "No status changes recorded yet."
+        val changes = if (data.history.isEmpty()) "No status changes recorded yet."
         else data.history.reversed().joinToString("\n\n") { event ->
             "${DateFormat.getDateTimeInstance().format(Date(event.at))}\n${event.from} → ${event.to}\nSource: ${event.source}"
         }
+        val reviews = data.reviewHistory.reversed().take(30).joinToString("\n") { event ->
+            val p = event.progress
+            "${DateFormat.getDateTimeInstance().format(Date(event.at))}: " +
+                listOfNotNull(p.invited?.let { "Invited $it" }, p.accepted?.let { "Accepted $it" },
+                    p.reports?.let { "Reports $it" }).joinToString(" · ")
+        }
+        val message = changes + if (reviews.isBlank()) "" else "\n\nPeer-review observations\n$reviews"
         AlertDialog.Builder(this).setTitle("History: ${item.manuscriptId}")
             .setMessage(message).setPositiveButton("Close", null).show()
+    }
+
+    private fun manageTrackingLinks(item: Manuscript) {
+        val latest = SubmissionStore.all(this).find { it.id == item.id } ?: item
+        val links = TrackingSources.effective(latest)
+        val entry = EditText(this).apply {
+            hint = "Paste an HTTPS manuscript tracking link"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+            setPadding(dp(18), dp(12), dp(18), dp(12))
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+            addView(text("Add an Elsevier Author Hub, article production, Springer, or journal tracking link. " +
+                "Your private links stay on this device.", 12f, color = gray))
+            addView(entry)
+            addView(text("Saved tracking sources:", 12f, bold = true),
+                LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+        }
+        for (source in links) {
+            content.addView(pillButton("Remove ${source.kind.title}${if (source.folder.isNotBlank()) " (${source.folder})" else ""}") {
+                AlertDialog.Builder(this).setTitle("Remove tracking source?")
+                    .setMessage("Remove this saved link from Manuscript Watch? This does not affect the journal website.")
+                    .setPositiveButton("Remove") { _, _ ->
+                        SubmissionStore.removeTrackingSource(this, item.id, source.url)
+                        draw()
+                    }.setNegativeButton("Cancel", null).show()
+            })
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Tracking links for ${item.manuscriptId}")
+            .setView(content)
+            .setPositiveButton("Add link", null)
+            .setNegativeButton("Close", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val url = entry.text.toString().trim()
+                if (!TrackingSources.isSupportedUrl(url)) {
+                    Toast.makeText(this, "Enter a valid HTTPS tracking page, not a login redirect.", Toast.LENGTH_LONG).show()
+                    return@setOnClickListener
+                }
+                SubmissionStore.addTrackingSource(this, item.id, url)
+                dialog.dismiss()
+                draw()
+            }
+        }
+        dialog.show()
     }
 
     private fun editManuscript(existing: Manuscript?) {
@@ -283,6 +349,8 @@ class MainActivity : ComponentActivity() {
         val currentStatus = field("Current status (optional)", existing?.currentStatus?.takeUnless { it == "Not checked" } ?: "")
         val journalUrl = field("Journal sign-in page (HTTPS)", existing?.journalUrl ?: "", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
         val statusUrl = field("Tracking page (optional)", existing?.statusUrl ?: "", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
+        val editorialMenu = field("Editorial Manager Author Main Menu (optional)",
+            existing?.editorialMenuUrl ?: "", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
         Line(text("No technical setup needed: save this paper, tap Open journal, sign in, " +
             "open the page where its current status appears, then tap Track page. " +
             "The tracking link is saved for you automatically. " +
@@ -300,11 +368,12 @@ class MainActivity : ComponentActivity() {
                 val m = manuscriptId.text.toString().trim()
                 val signIn = journalUrl.text.toString().trim()
                 val statusPage = statusUrl.text.toString().trim()
+                val menuPage = editorialMenu.text.toString().trim()
                 if (t.isBlank() || j.isBlank() || m.isBlank()) {
                     Toast.makeText(this, "Title, journal and manuscript ID are required.", Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
-                if (listOf(signIn, statusPage).any { it.isNotBlank() && !it.startsWith("https://", true) }) {
+                if (listOf(signIn, statusPage, menuPage).any { it.isNotBlank() && !it.startsWith("https://", true) }) {
                     Toast.makeText(this, "Please use HTTPS URLs.", Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
@@ -312,12 +381,18 @@ class MainActivity : ComponentActivity() {
                     Toast.makeText(this, "This is a login redirect or notification site, not a manuscript status page.", Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
+                if (menuPage.isNotBlank() && !EditorialManagerDiscovery.isEditorialManager(menuPage)) {
+                    Toast.makeText(this, "Use the Editorial Manager Author Main Menu URL, or leave it blank.", Toast.LENGTH_LONG).show()
+                    return@setOnClickListener
+                }
                 val saved = (existing ?: Manuscript(title = t, journal = j, manuscriptId = m)).copy(
                     title = t, journal = j, manuscriptId = m,
                     journalUrl = signIn, statusUrl = JournalPageClassifier.canonicalStatusUrl(statusPage),
+                    editorialMenuUrl = menuPage,
                     cssSelector = existing?.cssSelector.orEmpty() // Preserve legacy custom rules; new manuscripts use automatic detection.
                 )
                 SubmissionStore.save(this, saved)
+                if (statusPage.isNotBlank()) SubmissionStore.addTrackingSource(this, saved.id, statusPage)
                 val initial = currentStatus.text.toString().trim()
                 if (initial.isNotBlank() && initial != saved.currentStatus) {
                     SubmissionStore.observe(this, saved.id, initial, "Manual entry")
