@@ -55,6 +55,7 @@ object ElsevierWebMonitor {
             var started = false
             var polls = 0
             var lastError = "Page has not rendered a clearly labeled status."
+            var lastProgress: ReviewProgress? = null
             fun finish(result: ExtractResult) {
                 if (completed) return
                 completed = true
@@ -92,10 +93,12 @@ object ElsevierWebMonitor {
                     if (!html.isNullOrBlank()) {
                         val parsed = TrackingPageParser.elsevierTracking(html, source.url)
                         if (parsed is ExtractResult.Found) { finish(parsed); return@evaluateJavascript }
-                        lastError = (parsed as ExtractResult.NeedsAttention).reason
+                        val issue = parsed as ExtractResult.NeedsAttention
+                        lastError = issue.reason
+                        lastProgress = issue.reviewProgress ?: lastProgress
                     }
                     polls++
-                    if (polls >= 17) finish(ExtractResult.NeedsAttention(lastError))
+                    if (polls >= 17) finish(ExtractResult.NeedsAttention(lastError, lastProgress))
                     else handler.postDelayed({ poll() }, 1_500L)
                 }
             }
