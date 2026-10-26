@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'bootstrap/part-04.b64'
+      - 'ManuscriptWatch-v0.1.8-GitHub-public-ready.zip'
   workflow_dispatch:
 
 permissions:
@@ -18,13 +18,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat bootstrap/part-*.b64 | base64 --decode > /tmp/manuscript-watch-source.tar.xz
-          echo "7312f683bd1384445197cd27de1f408bcfe3f9cccd6dc5e9894da7cdcc399ba9  /tmp/manuscript-watch-source.tar.xz" | sha256sum -c -
-          tar -xJf /tmp/manuscript-watch-source.tar.xz -C .
+          test -f ManuscriptWatch-v0.1.8-GitHub-public-ready.zip
+          echo "5054d743cdd853ab5bf55837428ef9ab130788fe6d60e8ffad9c5a888f371265  ManuscriptWatch-v0.1.8-GitHub-public-ready.zip" | sha256sum -c -
+          unzip -q ManuscriptWatch-v0.1.8-GitHub-public-ready.zip -d .
           test -f app/build.gradle.kts
           test -f app/src/main/java/org/manuscriptwatch/app/SpringerWebMonitor.kt
           test -f .github/workflows/build-apk.yml
-          rm -rf bootstrap
+          rm -f ManuscriptWatch-v0.1.8-GitHub-public-ready.zip
       - name: Publish extracted source
         shell: bash
         run: |
