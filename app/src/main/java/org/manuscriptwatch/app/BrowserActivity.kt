@@ -90,7 +90,6 @@ class BrowserActivity : ComponentActivity() {
             }
             val record = SubmissionStore.all(this).find { it.id == manuscriptId } ?: return@action
             val savedUrl = JournalPageClassifier.canonicalStatusUrl(current)
-            SubmissionStore.save(this, record.copy(statusUrl = savedUrl))
             CookieManager.getInstance().flush()
             // Unlike the worker's plain HTTP request, this captures the live DOM after
             // React/other client-side rendering. Does not log or persist the HTML.
@@ -105,12 +104,21 @@ class BrowserActivity : ComponentActivity() {
                 })()""".trimIndent()
             ) { result ->
                 val html = runCatching { JSONTokener(result).nextValue() as? String }.getOrNull()
+                if (!html.isNullOrEmpty() &&
+                    EditorialManagerDiscovery.isMenuPage(html, savedUrl)) {
+                    SubmissionStore.setEditorialMenu(this, record.id, savedUrl)
+                    Toast.makeText(this, "Editorial Manager Author Main Menu saved. The app will check accessible manuscript folders.", Toast.LENGTH_LONG).show()
+                    finish()
+                    return@evaluateJavascript
+                }
+                SubmissionStore.addTrackingSource(this, record.id, savedUrl)
                 val parsed = if (!html.isNullOrEmpty() && html.length <= 1_700_000)
                     StatusExtractor.extract(html, record.manuscriptId, record.cssSelector, savedUrl)
                 else ExtractResult.NeedsAttention("Page HTML unavailable or exceeds 1.7 MB.")
                 if (parsed is ExtractResult.Found) {
-                    val change = SubmissionStore.observe(this, record.id, parsed.status, "Rendered journal page")
-                    if (change != null) AppNotifications.notifyChange(this, change)
+                    val link = TrackingSource(TrackingKind.fromUrl(savedUrl), savedUrl)
+                    SubmissionStore.observeSource(this, record.id, link, parsed)
+                        .forEach { AppNotifications.notifyChange(this, it) }
                     Toast.makeText(this, "Tracking started: ${parsed.status}", Toast.LENGTH_LONG).show()
                     finish()
                 } else {
@@ -162,6 +170,8 @@ class BrowserActivity : ComponentActivity() {
             JournalPageClassifier.PageKind.POSSIBLE_STATUS_PAGE ->
                 if (JournalPageClassifier.isSpringerSubmissionDetail(current))
                     "Springer manuscript detected. When its current status appears, tap Track page. The app will try to check this page periodically."
+                else if (EditorialManagerDiscovery.isEditorialManager(current))
+                    "Open the Author Main Menu and tap Track page to search its manuscript folders. You can also track a specific manuscript status page."
                 else "When you can see your manuscript and its current status, tap Track page. You do not need any HTML settings."
             JournalPageClassifier.PageKind.INVALID ->
                 "Unsupported page. Open an HTTPS journal page."
