@@ -31,7 +31,9 @@ data class TrackingSource(
     val url: String,
     val lastStatus: String = "",
     val lastChecked: Long = 0L,
-    val folder: String = ""
+    val folder: String = "",
+    val lastError: String = "",
+    val lastAttempted: Long = 0L
 )
 
 data class ReviewProgress(
