@@ -11,8 +11,8 @@ android {
         applicationId = "org.manuscriptwatch.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.2.0-dev.2"
+        versionCode = 13
+        versionName = "0.2.0-dev.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
