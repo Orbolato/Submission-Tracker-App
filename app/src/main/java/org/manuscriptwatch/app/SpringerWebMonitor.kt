@@ -86,6 +86,8 @@ object SpringerWebMonitor {
         var completed = false
         var lastReason = "Springer content has not rendered its current status."
         var lastProgress: ReviewProgress? = null
+        var bestFound: ExtractResult.Found? = null
+        var firstStatusPoll: Int? = null
         var polls = 0
 
         fun finish(result: ExtractResult) {
@@ -133,18 +135,28 @@ object SpringerWebMonitor {
                     val parsed = StatusExtractor.extract(html, manuscript.manuscriptId,
                         manuscript.cssSelector, expectedUrl)
                     if (parsed is ExtractResult.Found) {
-                        finish(parsed)
-                        return@evaluateJavascript
+                        // Springer may render its status card before the reviewer-news
+                        // widget. Allow several short polls for the explicit counts.
+                        // Never turn a missing completed-review field into zero.
+                        bestFound = if (parsed.reviewProgress != null) parsed
+                            else bestFound?.takeIf { it.reviewProgress != null } ?: parsed
+                        if (firstStatusPoll == null) firstStatusPoll = polls
+                        if (bestFound?.reviewProgress != null ||
+                            polls - (firstStatusPoll ?: polls) >= 3) {
+                            finish(bestFound!!)
+                            return@evaluateJavascript
+                        }
+                    } else {
+                        val issue = parsed as ExtractResult.NeedsAttention
+                        lastReason = issue.reason
+                        lastProgress = issue.reviewProgress ?: lastProgress
                     }
-                    val issue = parsed as ExtractResult.NeedsAttention
-                    lastReason = issue.reason
-                    lastProgress = issue.reviewProgress ?: lastProgress
                 } else {
                     lastReason = "Springer page is not ready or its DOM is too large to inspect safely."
                 }
                 polls++
                 if (polls >= 16) {
-                    finish(ExtractResult.NeedsAttention(
+                    finish(bestFound ?: ExtractResult.NeedsAttention(
                         "Springer page loaded, but a current status was not identified. $lastReason", lastProgress
                     ))
                 } else {
