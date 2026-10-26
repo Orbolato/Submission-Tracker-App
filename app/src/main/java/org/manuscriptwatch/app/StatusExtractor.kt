@@ -68,7 +68,7 @@ object StatusExtractor {
 
         // A direct Springer submission page can omit the editorial manuscript ID.
         // The UUID in its URL identifies the selected submission. Only extract a clearly
-        // labelled status within that page, never a status appearing in unrelated prose.
+        // labeled status within that page, never a status appearing in unrelated prose.
         if (directSpringer) {
             val detailStatus = extractDetailStatus(doc)
             if (detailStatus != null) return ExtractResult.Found(detailStatus)
