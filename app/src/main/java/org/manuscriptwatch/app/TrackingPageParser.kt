@@ -15,39 +15,46 @@ object TrackingPageParser {
     private val progressPatterns = mapOf(
         "invited" to listOf("reviewers invited", "reviewer invitations sent", "invitations sent", "reviewers contacted"),
         "accepted" to listOf("reviewers accepted", "reviewers agreed", "invitations accepted", "reviewers agreed to review"),
-        "reports" to listOf("reviews received", "reviewer reports received", "reports received", "completed reviews")
+        "reports" to listOf("reviews completed", "reviews received", "reviewer reports received", "reports received", "completed reviews")
     )
 
     fun reviewProgress(html: String): ReviewProgress? {
         val doc = Jsoup.parse(html)
-        fun labeledCount(terms: List<String>): Int? {
-            // Inspect compact visible labels and their immediately adjacent value.
+        // The publisher's "2+" means at least two invitations, not exactly two.
+        // Preserve that qualifier rather than coercing it to an exact count.
+        data class Count(val value: Int, val atLeast: Boolean)
+        fun labeledCount(terms: List<String>): Count? {
             val nodes = doc.select("dt,dd,span,div,p,li,td,th,strong,b")
             for (node in nodes) {
                 val text = node.ownText().trim().lowercase().replace(Regex("\\s+"), " ")
-                if (text.length !in 3..100) continue
-                val term = terms.firstOrNull { text.contains(it) } ?: continue
-                val escaped = Regex.escape(term)
-                val before = Regex("\\b(\\d{1,3})\\s+$escaped\\b").find(text)
-                val after = Regex("\\b$escaped\\s*[:–-]?\\s*(\\d{1,3})\\b").find(text)
-                val n = (before?.groupValues?.get(1) ?: after?.groupValues?.get(1))?.toIntOrNull()
-                if (n != null) return n
-                if (text == term || text == "$term:") {
-                    val sibling = node.nextElementSibling()?.text()?.trim().orEmpty()
-                    if (sibling.matches(Regex("\\d{1,3}"))) return sibling.toInt()
-                    val parent = node.parent()
-                    if (parent != null && parent.childrenSize() == 2) {
-                        val pair = parent.children().firstOrNull { it !== node }?.text()?.trim().orEmpty()
-                        if (pair.matches(Regex("\\d{1,3}"))) return pair.toInt()
+                if (text.length !in 3..120) continue
+                for (term in terms) {
+                    val escaped = Regex.escape(term)
+                    // Pair either "Review invitations sent: 2+" or "2+ reviewers invited".
+                    val after = Regex("\\b$escaped\\s*[:\u2013-]?\\s*(\\d{1,3})(\\+?)(?!\\d)").find(text)
+                    val before = Regex("\\b(\\d{1,3})(\\+?)\\s+$escaped\\b").find(text)
+                    val result = after ?: before
+                    if (result != null) return Count(result.groupValues[1].toInt(), result.groupValues[2] == "+")
+                    if (text == term || text == "$term:") {
+                        val sibling = node.nextElementSibling()?.text()?.trim().orEmpty()
+                        val paired = sibling.takeIf { it.matches(Regex("\\d{1,3}\\+?")) }
+                            ?: node.parent()?.takeIf { it.childrenSize() == 2 }?.children()
+                                ?.firstOrNull { it !== node }?.text()?.trim()
+                        if (paired != null && paired.matches(Regex("\\d{1,3}\\+?")))
+                            return Count(paired.trimEnd('+').toInt(), paired.endsWith('+'))
                     }
                 }
             }
             return null
         }
+        val invited = labeledCount(progressPatterns.getValue("invited"))
+        val accepted = labeledCount(progressPatterns.getValue("accepted"))
+        val reports = labeledCount(progressPatterns.getValue("reports"))
         val progress = ReviewProgress(
-            invited = labeledCount(progressPatterns.getValue("invited")),
-            accepted = labeledCount(progressPatterns.getValue("accepted")),
-            reports = labeledCount(progressPatterns.getValue("reports"))
+            invited = invited?.value,
+            invitedAtLeast = invited?.atLeast ?: false,
+            accepted = accepted?.value,
+            reports = reports?.value
         )
         return progress.takeUnless { it.isEmpty() }
     }
@@ -63,7 +70,7 @@ object TrackingPageParser {
         if (Regex("(?i)captcha|verify you are human|access denied").containsMatchIn(text)) {
             return ExtractResult.NeedsAttention("Tracking website requires manual verification.")
         }
-        val status = explicitStatus(doc) ?: activeTimelineStage(doc)
+        val status = explicitStatus(doc) ?: activeTimelineStage(doc) ?: clearlyLabeledBanner(doc)
         val progress = reviewProgress(html)
         if (status != null) return ExtractResult.Found(status, progress)
         return ExtractResult.NeedsAttention(
@@ -96,6 +103,31 @@ object TrackingPageParser {
             }
         }
         return null
+    }
+
+    /** A prominent single-status banner (such as Elsevier Author Hub's "Under Review")
+     * can be a status even without a "Status:" label. Never infer from a general timeline.
+     */
+    private fun clearlyLabeledBanner(doc: Document): String? {
+        val known = setOf("under review", "in peer review", "with editor", "decision in process",
+            "submitted to journal", "required reviews completed", "revision requested",
+            "major revision", "minor revision", "accepted", "in production", "published")
+        val candidates = doc.select("h1,h2,h3,h4,[data-testid*=status],[class*=status],[class*=Status]")
+            .mapNotNull { node ->
+                val label = node.text().trim().replace(Regex("\\s+"), " ")
+                label.takeIf { it.lowercase() in known }
+            }.distinct()
+        if (candidates.size == 1) return candidates[0]
+        // Some publisher templates put the current status directly above the last review activity.
+        val banners = doc.select("div,section,aside").mapNotNull { node ->
+            if (node.childrenSize() > 8) return@mapNotNull null
+            val text = node.text().trim().replace(Regex("\\s+"), " ")
+            if (text.length !in 20..150 || !text.contains("Last review activity", true)) return@mapNotNull null
+            known.firstOrNull { text.startsWith(it, true) }?.let { term ->
+                term.takeIf { text.length > it.length && text.substring(it.length).startsWith(" Last review activity", true) }
+            }
+        }.distinct()
+        return banners.singleOrNull()?.split(' ')?.joinToString(" ") { it.replaceFirstChar(Char::uppercaseChar) }
     }
 
     /** Only a current/active milestone can determine the stage; historical items are not current. */
