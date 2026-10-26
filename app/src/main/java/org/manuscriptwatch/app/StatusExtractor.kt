@@ -33,7 +33,7 @@ object StatusExtractor {
             return TrackingPageParser.elsevierTracking(html, pageUrl)
         val doc = Jsoup.parse(html)
         val review = if (JournalPageClassifier.isSpringerSubmissionDetail(pageUrl))
-            TrackingPageParser.reviewProgress(html) else null
+            TrackingPageParser.springerReviewProgress(html) else null
         val rawText = doc.body()?.text()?.lowercase() ?: ""
         if (rawText.isBlank()) return ExtractResult.NeedsAttention("No visible text; the site may require JavaScript.")
         if (doc.selectFirst("input[type=password]") != null &&
