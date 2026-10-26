@@ -144,6 +144,12 @@ class TrackingPageParserTest {
         assertNull(progress.reports)
     }
 
+    @Test fun completedReviewDisplayDistinguishesUnknownZeroAndReportedNumber() {
+        assertEquals("Not displayed", ReviewProgress(invited = 6, accepted = 1).completedLabel())
+        assertEquals("0", ReviewProgress(reports = 0).completedLabel())
+        assertEquals("2", ReviewProgress(reports = 2).completedLabel())
+    }
+
     @Test fun springerNarrativeUnrelatedNumbersDoNotCountAsReviewerProgress() {
         val html = "<body><p>6 other journals invited reviewers last year.</p>" +
             "<p>Our support FAQ says there is 1 reviewer who accepted a review in another system.</p></body>"
