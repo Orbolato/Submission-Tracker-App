@@ -48,7 +48,7 @@ An on-device Android starter app for tracking manuscripts across journal systems
 
 ## Phone-only GitHub build
 
-To build without Android Studio, go to [Build Android APK](https://github.com/Orbolato/Submission-Tracker-App/actions/workflows/build-apk.yml), choose **Run workflow**, open its completed run, and download the debug APK under **Artifacts**. Do not uninstall an existing app to install an APK signed by a different debug key: uninstalling clears local manuscript data and authenticated sessions. [PHONE_INSTALL.md](PHONE_INSTALL.md) describes a legacy setup for creating a separate GitHub repository; it is not needed when using this one.
+To build without Android Studio, go to [Build Android APK](https://github.com/Orbolato/Submission-Tracker-App/actions/workflows/build-apk.yml), choose **Run workflow**, open its completed run, and download the debug APK under **Artifacts**. Do not uninstall an existing app to install an APK signed by a different debug key: uninstalling clears local manuscript data and authenticated sessions. See [PHONE_INSTALL.md](PHONE_INSTALL.md) for current phone installation instructions.
 
 ## Build and install (Android Studio)
 
