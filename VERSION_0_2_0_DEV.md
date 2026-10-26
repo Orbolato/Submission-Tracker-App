@@ -50,3 +50,14 @@ Live Elsevier Author Hub markup remains unverified. Do not share real tracking t
 - This is a development build with `versionCode = 11`; the Android package identifier remains unchanged for in-place upgrades signed with the same local Android Studio key.
 
 **Verification:** Unit tests use synthetic Author Hub HTML corresponding to the visible labels `Review invitations sent: 2+`, `Review invitations accepted: 2`, and `Reviews completed: 0`. Real publisher navigation remains unverified. Do not share live tracking URLs or manuscript identifiers in public issues.
+
+## v0.2.0-dev.2: Springer Nature peer-review news
+
+- Recognize explicitly displayed SNAPP reviewer-news sentences such as **"The editor has invited 6 reviewer(s)"** and **"There is 1 reviewer(s) that has accepted to review your manuscript"**.
+- Record the example as **Invited: 6 | Accepted: 1**. Do **not** show **Completed: 0** when Springer does not report completed or received reviews. Unavailable information remains unknown.
+- Continue using existing labeled reviewer metrics if Springer displays them, including an explicitly stated "Reviews received" count.
+- During background monitoring, allow a few additional WebView polls after the current status renders so asynchronous reviewer-news content can appear.
+- Add synthetic regression tests covering both sentence patterns, explicit received reviews, and misleading unrelated prose.
+- Increase Android versionCode to 12, versionName to `0.2.0-dev.2`, while retaining the same application ID for same-key updates.
+
+Actual Springer DOM layouts and live account session behavior still require an on-device check. Do not commit screenshots containing manuscript IDs or private tracking links.
