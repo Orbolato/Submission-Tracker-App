@@ -147,7 +147,7 @@ class MainActivity : ComponentActivity() {
             if (!item.reviewProgress.isEmpty()) {
                 val r = item.reviewProgress
                 val details = listOfNotNull(r.invitedLabel()?.let { "Invited: $it" },
-                    r.accepted?.let { "Accepted: $it" }, r.reports?.let { "Completed: $it" })
+                    r.accepted?.let { "Accepted: $it" }, "Completed: ${r.completedLabel()}")
                 Line(text("Peer review · ${details.joinToString("  |  ")}", 12f, color = teal), c, 7)
             }
             val checked = if (item.lastChecked == 0L) "Not checked yet" else
@@ -273,7 +273,7 @@ class MainActivity : ComponentActivity() {
             val p = event.progress
             "${DateFormat.getDateTimeInstance().format(Date(event.at))}: " +
                 listOfNotNull(p.invitedLabel()?.let { "Invited $it" }, p.accepted?.let { "Accepted $it" },
-                    p.reports?.let { "Completed $it" }).joinToString(" · ")
+                    "Completed ${p.completedLabel()}").joinToString(" · ")
         }
         val message = changes + if (reviews.isBlank()) "" else "\n\nPeer-review observations\n$reviews"
         AlertDialog.Builder(this).setTitle("History: ${item.manuscriptId}")
