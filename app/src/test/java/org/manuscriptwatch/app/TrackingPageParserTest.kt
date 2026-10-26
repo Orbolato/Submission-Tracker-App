@@ -126,6 +126,24 @@ class TrackingPageParserTest {
         assertEquals(1, progress.reports)
     }
 
+    @Test fun springerRecognizesExplicitReviewerReportReceivedCount() {
+        val html = "<body><ul><li>The editor has invited 6 reviewer(s)</li>" +
+            "<li>There is 1 reviewer(s) that has accepted to review your manuscript</li>" +
+            "<li>Reviewer report(s) received: 1</li></ul></body>"
+        val progress = TrackingPageParser.springerReviewProgress(html)!!
+        assertEquals(6, progress.invited)
+        assertEquals(1, progress.accepted)
+        assertEquals(1, progress.reports)
+    }
+
+    @Test fun springerAbsentReviewerReportCountRemainsUnknown() {
+        val html = "<body><li>The editor has invited 6 reviewer(s)</li>" +
+            "<li>There is 1 reviewer(s) that has accepted to review your manuscript</li>" +
+            "<p>After the editor has collated and reviewed all the reports they need</p></body>"
+        val progress = TrackingPageParser.springerReviewProgress(html)!!
+        assertNull(progress.reports)
+    }
+
     @Test fun springerNarrativeUnrelatedNumbersDoNotCountAsReviewerProgress() {
         val html = "<body><p>6 other journals invited reviewers last year.</p>" +
             "<p>Our support FAQ says there is 1 reviewer who accepted a review in another system.</p></body>"
