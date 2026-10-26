@@ -231,13 +231,14 @@ object SubmissionStore {
     }
 
     private fun ReviewProgress.toJson(): JSONObject = JSONObject().apply {
-        if (invited != null) put("invited", invited)
+        if (invited != null) { put("invited", invited); put("invitedAtLeast", invitedAtLeast) }
         if (accepted != null) put("accepted", accepted)
         if (reports != null) put("reports", reports)
     }
 
     private fun JSONObject.toProgress(): ReviewProgress = ReviewProgress(
         invited = if (has("invited") && !isNull("invited")) optInt("invited") else null,
+        invitedAtLeast = optBoolean("invitedAtLeast", false),
         accepted = if (has("accepted") && !isNull("accepted")) optInt("accepted") else null,
         reports = if (has("reports") && !isNull("reports")) optInt("reports") else null
     )
