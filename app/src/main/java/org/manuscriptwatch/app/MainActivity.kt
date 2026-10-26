@@ -139,9 +139,11 @@ class MainActivity : ComponentActivity() {
             Line(text(item.manuscriptId, 12f, color = gray), c, 3)
             Line(text(item.currentStatus, 17f, bold = true, color = statusColor(item.currentStatus)), c, 12)
             val count = TrackingSources.effective(item).size
+            val problems = TrackingSources.effective(item).count { it.lastError.isNotBlank() }
             Line(text("$count tracking source${if (count == 1) "" else "s"}" +
-                if (item.currentFolder.isNotBlank()) " · Folder: ${item.currentFolder}" else "",
-                11f, color = gray), c, 4)
+                (if (problems > 0) " · $problems need attention" else "") +
+                (if (item.currentFolder.isNotBlank()) " · Folder: ${item.currentFolder}" else ""),
+                11f, color = if (problems > 0) Color.rgb(160, 77, 34) else gray), c, 4)
             if (!item.reviewProgress.isEmpty()) {
                 val r = item.reviewProgress
                 val details = listOfNotNull(r.invited?.let { "Invited: $it" },
@@ -300,7 +302,24 @@ class MainActivity : ComponentActivity() {
             val lastStatus = source.lastStatus.ifBlank { "Not checked" }
             content.addView(text("${source.kind.title}: $lastStatus" +
                 if (source.folder.isNotBlank()) " (${source.folder})" else "",
-                12f, color = gray))
+                12f, color = ink))
+            val checkTime = source.lastAttempted.takeIf { it != 0L }?.let {
+                DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it))
+            } ?: "Never"
+            content.addView(text("Last check: $checkTime", 11f, color = gray))
+            if (source.lastError.isNotBlank()) {
+                content.addView(text("Attention: ${source.lastError}", 11f, color = Color.rgb(160, 77, 34)))
+            }
+            content.addView(pillButton("Check ${source.kind.title}") {
+                MonitorScheduler.checkNow(this, item.id, source.url)
+                Toast.makeText(this, "Checking ${source.kind.title}. Open Tracking links again after Refresh.", Toast.LENGTH_LONG).show()
+            })
+            content.addView(pillButton("Open tracking page") {
+                startActivity(Intent(this, BrowserActivity::class.java).apply {
+                    putExtra("url", source.url)
+                    putExtra("manuscriptId", item.id)
+                })
+            })
             content.addView(pillButton("Remove ${source.kind.title}") {
                 AlertDialog.Builder(this).setTitle("Remove tracking source?")
                     .setMessage("Remove this saved link from Manuscript Watch? This does not affect the journal website.")
@@ -310,9 +329,10 @@ class MainActivity : ComponentActivity() {
                     }.setNegativeButton("Cancel", null).show()
             })
         }
+        val scroll = ScrollView(this).apply { addView(content) }
         val dialog = AlertDialog.Builder(this)
             .setTitle("Tracking links for ${item.manuscriptId}")
-            .setView(content)
+            .setView(scroll)
             .setPositiveButton("Add link", null)
             .setNegativeButton("Close", null).create()
         dialog.setOnShowListener {
