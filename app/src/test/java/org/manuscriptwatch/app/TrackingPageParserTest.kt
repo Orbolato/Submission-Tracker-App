@@ -43,6 +43,24 @@ class TrackingPageParserTest {
         assertNull(TrackingPageParser.reviewProgress("<body>Reviewers invited to learn more.</body>"))
     }
 
+    @Test fun capturesReviewerProgressEvenWithoutStatusLabel() {
+        val html = "<body><dl><dt>Reviewers invited</dt><dd>5</dd>" +
+            "<dt>Reviewers accepted</dt><dd>3</dd><dt>Reviews received</dt><dd>1</dd></dl></body>"
+        val result = TrackingPageParser.elsevierTracking(html, authorHub) as ExtractResult.NeedsAttention
+        assertEquals(5, result.reviewProgress?.invited)
+        assertEquals(3, result.reviewProgress?.accepted)
+        assertEquals(1, result.reviewProgress?.reports)
+    }
+
+    @Test fun recognizesOnlyExplicitlyCurrentTimelineStage() {
+        val html = "<body><ol><li>With Editor</li>" +
+            "<li aria-current='step'>Under Review</li><li>Decision in Process</li></ol></body>"
+        assertEquals("Under Review", (TrackingPageParser.elsevierTracking(html, authorHub)
+            as ExtractResult.Found).status)
+        val unmarked = "<body><ol><li>With Editor</li><li>Under Review</li></ol></body>"
+        assertTrue(TrackingPageParser.elsevierTracking(unmarked, authorHub) is ExtractResult.NeedsAttention)
+    }
+
     @Test fun rejectsUntrustedSchemeForExtraLinks() {
         assertTrue(!TrackingSources.isSupportedUrl("http://track.authorhub.elsevier.com/?uuid=demo"))
         assertTrue(!TrackingSources.isSupportedUrl("https://person@track.authorhub.elsevier.com/?uuid=demo"))
