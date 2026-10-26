@@ -4,7 +4,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
 sealed class ExtractResult {
-    data class Found(val status: String) : ExtractResult()
+    data class Found(val status: String, val reviewProgress: ReviewProgress? = null) : ExtractResult()
     data class NeedsAttention(val reason: String) : ExtractResult()
 }
 
@@ -28,7 +28,12 @@ object StatusExtractor {
         "accepted", "rejected", "revise", "incomplete", "withdrawn"
     )
     fun extract(html: String, manuscriptId: String, selector: String, pageUrl: String = ""): ExtractResult {
+        val kind = TrackingKind.fromUrl(pageUrl)
+        if (kind == TrackingKind.ELSEVIER_HUB || kind == TrackingKind.ELSEVIER_PRODUCTION)
+            return TrackingPageParser.elsevierTracking(html, pageUrl)
         val doc = Jsoup.parse(html)
+        val review = if (JournalPageClassifier.isSpringerSubmissionDetail(pageUrl))
+            TrackingPageParser.reviewProgress(html) else null
         val rawText = doc.body()?.text()?.lowercase() ?: ""
         if (rawText.isBlank()) return ExtractResult.NeedsAttention("No visible text; the site may require JavaScript.")
         if (doc.selectFirst("input[type=password]") != null &&
@@ -68,10 +73,10 @@ object StatusExtractor {
 
         // A direct Springer submission page can omit the editorial manuscript ID.
         // The UUID in its URL identifies the selected submission. Only extract a clearly
-        // labeled status within that page, never a status appearing in unrelated prose.
+        // labelled status within that page, never a status appearing in unrelated prose.
         if (directSpringer) {
             val detailStatus = extractDetailStatus(doc)
-            if (detailStatus != null) return ExtractResult.Found(detailStatus)
+            if (detailStatus != null) return ExtractResult.Found(detailStatus, review)
             return ExtractResult.NeedsAttention(
                 "Springer submission page recognized, but no unambiguous status label was found " +
                 "in the HTML. The content may load through JavaScript; open the journal and tap Track page " +
