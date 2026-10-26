@@ -19,22 +19,52 @@ class MonitorWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         val items = SubmissionStore.all(applicationContext).filter { chosenId == null || it.id == chosenId }
         for (item in items) {
             if (isStopped) break
-            if (item.statusUrl.isBlank()) continue
-            val result = try {
-                if (JournalPageClassifier.isSpringerSubmissionDetail(item.statusUrl))
-                    SpringerWebMonitor.check(applicationContext, item)
-                else SiteMonitor.check(item)
-            } catch (e: Exception) {
-                ExtractResult.NeedsAttention("Network or parsing error: ${e.javaClass.simpleName}")
-            }
-            when (result) {
-                is ExtractResult.Found -> {
-                    val change = SubmissionStore.observe(applicationContext, item.id, result.status,
-                        if (JournalPageClassifier.isSpringerSubmissionDetail(item.statusUrl))
-                            "Springer rendered webpage" else "Journal webpage")
-                    if (change != null) AppNotifications.notifyChange(applicationContext, change)
+            var found = false
+            val errors = mutableListOf<String>()
+            var discovered: EditorialManagerDiscovery.Found? = null
+            val isEditorial = listOf(item.editorialMenuUrl, item.journalUrl, item.statusUrl)
+                .any { EditorialManagerDiscovery.isEditorialManager(it) }
+            if (isEditorial) {
+                when (val discovery = EditorialManagerDiscovery.locate(item)) {
+                    is EditorialManagerDiscovery.Result.Located -> {
+                        discovered = discovery.value
+                        val endpoint = TrackingSource(TrackingKind.EDITORIAL_MANAGER,
+                            discovery.value.url, folder = discovery.value.folder)
+                        SubmissionStore.observeSource(applicationContext, item.id,
+                            endpoint, discovery.value.status, discovery.value.folder)
+                            .forEach { AppNotifications.notifyChange(applicationContext, it) }
+                        found = true
+                    }
+                    is EditorialManagerDiscovery.Result.NeedsAttention -> errors += discovery.reason
                 }
-                is ExtractResult.NeedsAttention -> SubmissionStore.updateError(applicationContext, item.id, result.reason)
+            }
+            val sources = TrackingSources.effective(item)
+            for (source in sources.take(8)) {
+                if (isStopped) break
+                // A newly discovered folder supersedes the old Editorial Manager folder.
+                if (source.kind == TrackingKind.EDITORIAL_MANAGER && discovered != null) continue
+                val result = try {
+                    when (source.kind) {
+                        TrackingKind.SPRINGER -> SpringerWebMonitor.check(applicationContext, item.copy(statusUrl = source.url))
+                        TrackingKind.ELSEVIER_HUB, TrackingKind.ELSEVIER_PRODUCTION ->
+                            ElsevierWebMonitor.check(applicationContext, source)
+                        else -> SiteMonitor.check(item.copy(statusUrl = source.url))
+                    }
+                } catch (e: Exception) {
+                    ExtractResult.NeedsAttention("Check failed (${e.javaClass.simpleName}).")
+                }
+                when (result) {
+                    is ExtractResult.Found -> {
+                        SubmissionStore.observeSource(applicationContext, item.id, source, result)
+                            .forEach { AppNotifications.notifyChange(applicationContext, it) }
+                        found = true
+                    }
+                    is ExtractResult.NeedsAttention -> errors += "${source.kind.title}: ${result.reason}"
+                }
+            }
+            if (!found) {
+                SubmissionStore.updateError(applicationContext, item.id,
+                    errors.firstOrNull() ?: "No tracking source is configured. Open the journal or add a tracking link.")
             }
         }
         Result.success()
