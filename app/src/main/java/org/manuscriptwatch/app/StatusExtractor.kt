@@ -5,7 +5,7 @@ import org.jsoup.nodes.Element
 
 sealed class ExtractResult {
     data class Found(val status: String, val reviewProgress: ReviewProgress? = null) : ExtractResult()
-    data class NeedsAttention(val reason: String) : ExtractResult()
+    data class NeedsAttention(val reason: String, val reviewProgress: ReviewProgress? = null) : ExtractResult()
 }
 
 /**
@@ -80,7 +80,7 @@ object StatusExtractor {
             return ExtractResult.NeedsAttention(
                 "Springer submission page recognized, but no unambiguous status label was found " +
                 "in the HTML. The content may load through JavaScript; open the journal and tap Track page " +
-                "after the details finish loading."
+                "after the details finish loading.", review
             )
         }
 
