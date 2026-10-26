@@ -146,8 +146,8 @@ class MainActivity : ComponentActivity() {
                 11f, color = if (problems > 0) Color.rgb(160, 77, 34) else gray), c, 4)
             if (!item.reviewProgress.isEmpty()) {
                 val r = item.reviewProgress
-                val details = listOfNotNull(r.invited?.let { "Invited: $it" },
-                    r.accepted?.let { "Accepted: $it" }, r.reports?.let { "Reports: $it" })
+                val details = listOfNotNull(r.invitedLabel()?.let { "Invited: $it" },
+                    r.accepted?.let { "Accepted: $it" }, r.reports?.let { "Completed: $it" })
                 Line(text("Peer review · ${details.joinToString("  |  ")}", 12f, color = teal), c, 7)
             }
             val checked = if (item.lastChecked == 0L) "Not checked yet" else
@@ -272,8 +272,8 @@ class MainActivity : ComponentActivity() {
         val reviews = data.reviewHistory.reversed().take(30).joinToString("\n") { event ->
             val p = event.progress
             "${DateFormat.getDateTimeInstance().format(Date(event.at))}: " +
-                listOfNotNull(p.invited?.let { "Invited $it" }, p.accepted?.let { "Accepted $it" },
-                    p.reports?.let { "Reports $it" }).joinToString(" · ")
+                listOfNotNull(p.invitedLabel()?.let { "Invited $it" }, p.accepted?.let { "Accepted $it" },
+                    p.reports?.let { "Completed $it" }).joinToString(" · ")
         }
         val message = changes + if (reviews.isBlank()) "" else "\n\nPeer-review observations\n$reviews"
         AlertDialog.Builder(this).setTitle("History: ${item.manuscriptId}")
@@ -281,8 +281,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun manageTrackingLinks(item: Manuscript) {
-        val latest = SubmissionStore.all(this).find { it.id == item.id } ?: item
-        val links = TrackingSources.effective(latest)
         val entry = EditText(this).apply {
             hint = "Paste an HTTPS manuscript tracking link"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
@@ -295,46 +293,61 @@ class MainActivity : ComponentActivity() {
             addView(text("Add an Elsevier Author Hub, article production, Springer, or journal tracking link. " +
                 "Your private links stay on this device.", 12f, color = gray))
             addView(entry)
-            addView(text("Saved tracking sources:", 12f, bold = true),
-                LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
         }
-        for (source in links) {
-            val lastStatus = source.lastStatus.ifBlank { "Not checked" }
-            content.addView(text("${source.kind.title}: $lastStatus" +
-                if (source.folder.isNotBlank()) " (${source.folder})" else "",
-                12f, color = ink))
-            val checkTime = source.lastAttempted.takeIf { it != 0L }?.let {
-                DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it))
-            } ?: "Never"
-            content.addView(text("Last check: $checkTime", 11f, color = gray))
-            if (source.lastError.isNotBlank()) {
-                content.addView(text("Attention: ${source.lastError}", 11f, color = Color.rgb(160, 77, 34)))
-            }
-            content.addView(pillButton("Check ${source.kind.title}") {
-                MonitorScheduler.checkNow(this, item.id, source.url)
-                Toast.makeText(this, "Checking ${source.kind.title}. Open Tracking links again after Refresh.", Toast.LENGTH_LONG).show()
-            })
-            content.addView(pillButton("Open tracking page") {
-                startActivity(Intent(this, BrowserActivity::class.java).apply {
-                    putExtra("url", source.url)
-                    putExtra("manuscriptId", item.id)
+        val refresh = pillButton("Refresh tracking results") { /* wired after the list is defined */ }
+        val savedLinks = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        content.addView(refresh)
+        content.addView(text("Saved tracking sources:", 12f, bold = true),
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+        content.addView(savedLinks)
+        var shownDialog: AlertDialog? = null
+        // Re-read persisted state every time: a queued WorkManager check may finish while open.
+        fun repaint() {
+            savedLinks.removeAllViews()
+            val updated = SubmissionStore.all(this).find { it.id == item.id } ?: item
+            val links = TrackingSources.effective(updated)
+            if (links.isEmpty()) savedLinks.addView(text("No saved tracking links.", 12f, color = gray))
+            for (source in links) {
+                val lastStatus = source.lastStatus.ifBlank { "Not checked" }
+                savedLinks.addView(text("${source.kind.title}: $lastStatus" +
+                    if (source.folder.isNotBlank()) " (${source.folder})" else "",
+                    12f, color = ink))
+                val checkTime = source.lastAttempted.takeIf { it != 0L }?.let {
+                    DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it))
+                } ?: "Never"
+                savedLinks.addView(text("Last check: $checkTime", 11f, color = gray))
+                if (source.lastError.isNotBlank())
+                    savedLinks.addView(text("Attention: ${source.lastError}", 11f, color = Color.rgb(160, 77, 34)))
+                savedLinks.addView(pillButton("Check ${source.kind.title}") {
+                    MonitorScheduler.checkNow(this, item.id, source.url)
+                    Toast.makeText(this, "Check queued. Tap Refresh tracking results after it finishes.", Toast.LENGTH_LONG).show()
                 })
-            })
-            content.addView(pillButton("Remove ${source.kind.title}") {
-                AlertDialog.Builder(this).setTitle("Remove tracking source?")
-                    .setMessage("Remove this saved link from Manuscript Watch? This does not affect the journal website.")
-                    .setPositiveButton("Remove") { _, _ ->
-                        SubmissionStore.removeTrackingSource(this, item.id, source.url)
-                        draw()
-                    }.setNegativeButton("Cancel", null).show()
-            })
+                savedLinks.addView(pillButton("Open tracking page") {
+                    startActivity(Intent(this, BrowserActivity::class.java).apply {
+                        putExtra("url", source.url)
+                        putExtra("manuscriptId", item.id)
+                    })
+                })
+                savedLinks.addView(pillButton("Remove ${source.kind.title}") {
+                    AlertDialog.Builder(this).setTitle("Remove tracking source?")
+                        .setMessage("Remove this saved link from Manuscript Watch? This does not affect the journal website.")
+                        .setPositiveButton("Remove") { _, _ ->
+                            SubmissionStore.removeTrackingSource(this, item.id, source.url)
+                            repaint()
+                            // Rebuild the dashboard behind this dialog as well.
+                            draw()
+                        }.setNegativeButton("Cancel", null).show()
+                })
+            }
         }
+        refresh.setOnClickListener { repaint(); draw() }
         val scroll = ScrollView(this).apply { addView(content) }
         val dialog = AlertDialog.Builder(this)
             .setTitle("Tracking links for ${item.manuscriptId}")
             .setView(scroll)
             .setPositiveButton("Add link", null)
             .setNegativeButton("Close", null).create()
+        shownDialog = dialog
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val url = entry.text.toString().trim()
@@ -343,10 +356,12 @@ class MainActivity : ComponentActivity() {
                     return@setOnClickListener
                 }
                 SubmissionStore.addTrackingSource(this, item.id, url)
-                dialog.dismiss()
+                entry.text.clear()
+                repaint()
                 draw()
             }
         }
+        repaint()
         dialog.show()
     }
 
