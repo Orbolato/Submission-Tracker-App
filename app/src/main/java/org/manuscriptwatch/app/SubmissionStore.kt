@@ -128,6 +128,13 @@ object SubmissionStore {
                         add(StatusChange(changed, "$label: $before", "$label: $after"))
                 }
                 changedCount("Reviewers invited", old.reviewProgress.invited, newProgress.invited)
+                if (old.reviewProgress.invited != null && newProgress.invited != null &&
+                    old.reviewProgress.invitedAtLeast != newProgress.invitedAtLeast &&
+                    old.reviewProgress.invited == newProgress.invited) {
+                    add(StatusChange(changed,
+                        "Invited: ${old.reviewProgress.invitedLabel()}",
+                        "Invited: ${newProgress.invitedLabel()}"))
+                }
                 changedCount("Reviewers accepted", old.reviewProgress.accepted, newProgress.accepted)
                 changedCount("Reports received", old.reviewProgress.reports, newProgress.reports)
             }
