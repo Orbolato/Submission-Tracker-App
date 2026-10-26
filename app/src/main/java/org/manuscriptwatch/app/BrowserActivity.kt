@@ -112,17 +112,22 @@ class BrowserActivity : ComponentActivity() {
                     return@evaluateJavascript
                 }
                 SubmissionStore.addTrackingSource(this, record.id, savedUrl)
-                val parsed = if (!html.isNullOrEmpty() && html.length <= 1_700_000)
-                    StatusExtractor.extract(html, record.manuscriptId, record.cssSelector, savedUrl)
-                else ExtractResult.NeedsAttention("Page HTML unavailable or exceeds 1.7 MB.")
+                val source = TrackingSource(TrackingKind.fromUrl(savedUrl), savedUrl)
+                val parsed = if (!html.isNullOrEmpty() && html.length <= 1_700_000) {
+                    if (source.kind == TrackingKind.ELSEVIER_HUB || source.kind == TrackingKind.ELSEVIER_PRODUCTION)
+                        TrackingPageParser.elsevierTracking(html, savedUrl)
+                    else StatusExtractor.extract(html, record.manuscriptId, record.cssSelector, savedUrl)
+                } else ExtractResult.NeedsAttention("Page HTML unavailable or exceeds 1.7 MB.")
                 if (parsed is ExtractResult.Found) {
-                    val link = TrackingSource(TrackingKind.fromUrl(savedUrl), savedUrl)
-                    SubmissionStore.observeSource(this, record.id, link, parsed)
+                    SubmissionStore.observeSource(this, record.id, source, parsed)
                         .forEach { AppNotifications.notifyChange(this, it) }
                     Toast.makeText(this, "Tracking started: ${parsed.status}", Toast.LENGTH_LONG).show()
                     finish()
                 } else {
-                    val reason = (parsed as ExtractResult.NeedsAttention).reason
+                    val issue = parsed as ExtractResult.NeedsAttention
+                    issue.reviewProgress?.let { SubmissionStore.observeReviewProgress(this, record.id, source, it) }
+                    SubmissionStore.recordSourceError(this, record.id, source, issue.reason)
+                    val reason = issue.reason
                     pageHint.text = "Tracking page saved, but I couldn't read a clear status yet. " +
                         "Wait until your manuscript and its current status are visible, then tap Track page again. Details: $reason"
                     Toast.makeText(this, "Page saved, but status not yet recognized.", Toast.LENGTH_LONG).show()
