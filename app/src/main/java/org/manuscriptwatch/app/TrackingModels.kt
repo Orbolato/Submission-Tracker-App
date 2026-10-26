@@ -44,6 +44,8 @@ data class ReviewProgress(
 ) {
     fun isEmpty() = invited == null && accepted == null && reports == null
     fun invitedLabel(): String? = invited?.let { "$it${if (invitedAtLeast) "+" else ""}" }
+    /** Missing data is not a report count of zero. */
+    fun completedLabel(): String = reports?.toString() ?: "Not displayed"
     fun merge(newer: ReviewProgress): ReviewProgress = ReviewProgress(
         invited = newer.invited ?: invited,
         invitedAtLeast = if (newer.invited != null) newer.invitedAtLeast else invitedAtLeast,
