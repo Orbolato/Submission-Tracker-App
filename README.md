@@ -4,7 +4,7 @@ Experimental Android app for tracking editorial submission statuses. Includes Sp
 
 **Privacy:** Do not commit manuscript identifiers, individual tracking links, passwords, ORCID tokens, cookies, `local.properties`, or signing keys. The source includes only synthetic identifiers for test pages. Runtime credentials and manuscript records are stored on the device, not in this repository.
 
-**Build:** Open this folder in Android Studio, configure SDK 35 / JDK 17, and run `gradlew.bat assembleDebug` on Windows. This is source code, not a prebuilt APK.
+**Build:** Open this folder in Android Studio, configure SDK 35 / JDK 17, and run `gradlew.bat assembleDebug` on Windows. This repository contains source code, not a signed production APK. [GitHub Actions](https://github.com/Orbolato/Submission-Tracker-App/actions/workflows/build-apk.yml) builds a downloadable *debug* APK and runs unit tests; the CI debug signing key may differ from your local Android Studio key. An APK signed with a different key cannot update an installed app without preserving the original signing identity.
 
 ---
 
@@ -41,14 +41,14 @@ An on-device Android starter app for tracking manuscripts across journal systems
 - Springer `submission.springernature.com/submission-details/<UUID>` links now use a separate WebView-based monitor that waits for JavaScript content, reuses WebView session storage, and reports sign-in expiry and parsing failures without guessing a status. This may fail under publisher security controls or Android background restrictions.
 - There is **no guaranteed general-purpose scraper** for Editorial Manager, ScholarOne, Editorial Express or bespoke portals. Their author pages often require authentication, JavaScript, anti-automation protections, and publisher-specific navigation. The generic HTML checker may fail even when login succeeds. Journal-by-journal adapters and real-account testing are needed for robust support.
 - The embedded browser may be disallowed by some OAuth providers. The **Chrome** fallback opens the external browser, whose cookies the app cannot import. The app **never** attempts to bypass CAPTCHAs, bot protections or access restrictions.
-- Not an APK. The Android SDK/Gradle distribution are unavailable in the authoring environment, so **the code has not been compiled on an Android device**. Build and test it in Android Studio before relying on it.
+- **Compilation has passed in GitHub Actions**. This does not establish publisher compatibility or reliable background monitoring on a physical Android device. Test with your own accounts before relying on notifications.
 - No claim that all publishers authorize polling/scraping; follow the journal's terms, use gentle check intervals and stop on access restrictions.
 - No push notification server. WorkManager checks run locally and can be delayed or suppressed by Android battery management. Force-stopping the app suspends scheduled work until the user opens it again.
 - The app does **not** discover new submissions automatically: add manuscripts manually initially.
 
 ## Phone-only GitHub build
 
-See [PHONE_INSTALL.md](PHONE_INSTALL.md) for a GitHub Actions build and installation workflow that needs no Android Studio on the phone. The CI workflow is provided but has not been run or verified.
+To build without Android Studio, go to [Build Android APK](https://github.com/Orbolato/Submission-Tracker-App/actions/workflows/build-apk.yml), choose **Run workflow**, open its completed run, and download the debug APK under **Artifacts**. Do not uninstall an existing app to install an APK signed by a different debug key: uninstalling clears local manuscript data and authenticated sessions. [PHONE_INSTALL.md](PHONE_INSTALL.md) describes a legacy setup for creating a separate GitHub repository; it is not needed when using this one.
 
 ## Build and install (Android Studio)
 
@@ -80,6 +80,17 @@ The **Current Status** column is used in Editorial Manager author manuscript fol
 | `MonitorWorker.kt` | Periodic/one-time WorkManager checks |
 | `AppNotifications.kt` | OS alerts when a status change is detected |
 | `StatusExtractorTest.kt` | Unit tests for table matching, legacy rules, and Springer detail-page extraction |
+
+
+## Project maturity and sharing
+
+**Status: experimental prototype.** Source availability and a successful CI build do not guarantee that status extraction will work reliably for Elsevier, Springer Nature, or other portals. Each publisher can change its pages, authentication requirements, or access policies without notice. Monitoring may be delayed or blocked by Android background execution policies. Please verify important submission updates directly with the journal.
+
+**Credentials and privacy:** ORCID credential storage is optional, local, and encrypted using Android Keystore; the optional vault decrypts credentials only after a user action in the app's embedded browser. The app does not implement unattended password login. Journal session cookies and manuscript metadata are local app data. Do not share private status links, cookies, passwords, keystores, or actual manuscript IDs in issues, screenshots, or commits.
+
+**Licensing:** No open-source license has been selected yet. Public availability does not by itself grant permission to redistribute or modify the code. A license must be added before presenting the project as openly reusable software.
+
+**Sharing vs. installing:** You may share this repository as public *source code* for evaluation. The GitHub-generated APK is a development/debug build, not a production release. GitHub-runner signing keys may differ from the key used for an existing phone installation. Avoid distributing a debug APK as an official release until signed-release, privacy, and security reviews are complete.
 
 ## Security and privacy
 
