@@ -30,3 +30,12 @@
 6. Compare Springer reviewer counts to the visible submission page; no count should appear when it is not shown.
 
 Privacy: Use synthetic IDs and redacted screenshots when reporting issues. Never post cookies, ORCID credentials, private manuscript tracking UUIDs, or full personal URLs in GitHub issues.
+
+## Tracking-source diagnostics update
+
+- Each tracking link now saves its own last checked status, last attempt time, and extraction error. One successful source no longer conceals a different source's error.
+- **Tracking links** now offers **Check [source]** and **Open tracking page**. Open a link in the app and select **Track page** after JavaScript content renders to try foreground extraction.
+- Explicit reviewer count observations can be saved even when the page has no recognized overall editorial status.
+- Explicitly marked active steps in Elsevier tracking timelines can be recognized; the app deliberately avoids guessing from unmarked historical steps.
+
+Live Elsevier Author Hub markup remains unverified. Do not share real tracking tokens or private manuscript links in public issues.
