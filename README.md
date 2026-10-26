@@ -79,7 +79,7 @@ For vulnerability reporting, see [SECURITY.md](SECURITY.md).
 
 The project is a research-oriented prototype and is **not affiliated with or endorsed by Springer Nature, Elsevier, ORCID, or any publisher**. Its core source is under `app/src/main/java/org/manuscriptwatch/app/`, with tests under `app/src/test/`.
 
-Contributions and reproducible, **redacted** bug reports are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md), and read the [v0.1.8 release notes](RELEASE_NOTES_v0.1.8.md) for current scope. Previous engineering notes are retained in the version-specific Markdown files.
+Contributions and reproducible, **redacted** bug reports are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md), and read the [v0.1.8 release notes](RELEASE_NOTES_0_1_8.md) for current scope. Previous engineering notes are retained in the version-specific Markdown files.
 
 ## License
 
