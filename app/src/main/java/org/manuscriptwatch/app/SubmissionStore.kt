@@ -23,7 +23,12 @@ data class Manuscript(
     val cssSelector: String = "",
     val lastChecked: Long = 0L,
     val lastError: String = "",
-    val history: List<StatusEvent> = emptyList()
+    val history: List<StatusEvent> = emptyList(),
+    val trackingSources: List<TrackingSource> = emptyList(),
+    val editorialMenuUrl: String = "",
+    val currentFolder: String = "",
+    val reviewProgress: ReviewProgress = ReviewProgress(),
+    val reviewHistory: List<ReviewEvent> = emptyList()
 )
 
 data class StatusChange(val manuscript: Manuscript, val before: String, val after: String)
@@ -80,6 +85,83 @@ object SubmissionStore {
         if (changed && before != "Not checked") StatusChange(updated, before, status) else null
     }
 
+    /** Update an individual endpoint while selecting the highest-priority known status.
+     * Legacy records remain readable because new fields default to empty values.
+     */
+    fun observeSource(
+        context: Context, id: String, endpoint: TrackingSource,
+        result: ExtractResult.Found, folder: String = ""
+    ): List<StatusChange> = synchronized(lock) {
+        val old = all(context).find { it.id == id } ?: return@synchronized emptyList()
+        val now = System.currentTimeMillis()
+        val sources = TrackingSources.effective(old).toMutableList()
+        val updated = endpoint.copy(
+            lastStatus = result.status.take(160), lastChecked = now,
+            folder = folder.ifBlank { endpoint.folder }
+        )
+        sources.removeAll { it.url == updated.url }
+        sources.add(updated)
+        val preferred = TrackingSources.preferred(sources)
+        val newStatus = preferred?.lastStatus ?: old.currentStatus
+        val statusChanged = newStatus != old.currentStatus
+        val newProgress = result.reviewProgress?.let { old.reviewProgress.merge(it) } ?: old.reviewProgress
+        val metricsChanged = newProgress != old.reviewProgress
+        val events = if (statusChanged) old.history + StatusEvent(
+            now, old.currentStatus, newStatus, preferred?.kind?.title ?: "Journal webpage"
+        ) else old.history
+        val reviewEvents = if (metricsChanged) old.reviewHistory + ReviewEvent(now, endpoint.kind.title, newProgress)
+            else old.reviewHistory
+        val changed = old.copy(
+            currentStatus = newStatus, trackingSources = sources,
+            lastChecked = now, lastError = "", history = events.takeLast(250),
+            currentFolder = folder.ifBlank { old.currentFolder },
+            reviewProgress = newProgress, reviewHistory = reviewEvents.takeLast(250)
+        )
+        save(context, changed)
+        buildList {
+            if (statusChanged && old.currentStatus != "Not checked")
+                add(StatusChange(changed, old.currentStatus, newStatus))
+            // Notify only when previously known counters change, not on first discovery.
+            if (metricsChanged && !old.reviewProgress.isEmpty()) {
+                fun changedCount(label: String, before: Int?, after: Int?) {
+                    if (before != null && after != null && before != after)
+                        add(StatusChange(changed, "$label: $before", "$label: $after"))
+                }
+                changedCount("Reviewers invited", old.reviewProgress.invited, newProgress.invited)
+                changedCount("Reviewers accepted", old.reviewProgress.accepted, newProgress.accepted)
+                changedCount("Reports received", old.reviewProgress.reports, newProgress.reports)
+            }
+        }
+    }
+
+    fun addTrackingSource(context: Context, id: String, url: String) = synchronized(lock) {
+        require(TrackingSources.isSupportedUrl(url))
+        all(context).find { it.id == id }?.let { item ->
+            val clean = JournalPageClassifier.canonicalStatusUrl(url)
+            val existing = TrackingSources.effective(item).toMutableList()
+            if (existing.none { it.url == clean })
+                existing.add(TrackingSource(TrackingKind.fromUrl(clean), clean))
+            save(context, item.copy(
+                statusUrl = item.statusUrl.ifBlank { clean },
+                trackingSources = existing
+            ))
+        }
+    }
+
+    fun removeTrackingSource(context: Context, id: String, url: String) = synchronized(lock) {
+        all(context).find { it.id == id }?.let { item ->
+            val remaining = TrackingSources.effective(item).filterNot { it.url == url }
+            save(context, item.copy(
+                statusUrl = if (item.statusUrl == url) remaining.firstOrNull()?.url.orEmpty() else item.statusUrl,
+                trackingSources = remaining
+            ))
+        }
+    }
+
+    fun setEditorialMenu(context: Context, id: String, url: String) = synchronized(lock) {
+        all(context).find { it.id == id }?.let { save(context, it.copy(editorialMenuUrl = url)) }
+    }
+
     private fun write(context: Context, entries: List<Manuscript>) {
         val json = JSONArray()
         entries.forEach { json.put(it.toJson()) }
@@ -97,6 +179,22 @@ object SubmissionStore {
         put("cssSelector", cssSelector)
         put("lastChecked", lastChecked)
         put("lastError", lastError)
+        put("editorialMenuUrl", editorialMenuUrl)
+        put("currentFolder", currentFolder)
+        put("trackingSources", JSONArray().apply { trackingSources.forEach { source ->
+            put(JSONObject().apply {
+                put("kind", source.kind.name); put("url", source.url)
+                put("lastStatus", source.lastStatus); put("lastChecked", source.lastChecked)
+                put("folder", source.folder)
+            })
+        } })
+        put("reviewProgress", reviewProgress.toJson())
+        put("reviewHistory", JSONArray().apply { reviewHistory.forEach { event ->
+            put(JSONObject().apply {
+                put("at", event.at); put("source", event.source)
+                put("progress", event.progress.toJson())
+            })
+        } })
         put("history", JSONArray().apply { history.forEach { event ->
             put(JSONObject().apply {
                 put("at", event.at); put("from", event.from)
@@ -105,8 +203,22 @@ object SubmissionStore {
         } })
     }
 
+    private fun ReviewProgress.toJson(): JSONObject = JSONObject().apply {
+        if (invited != null) put("invited", invited)
+        if (accepted != null) put("accepted", accepted)
+        if (reports != null) put("reports", reports)
+    }
+
+    private fun JSONObject.toProgress(): ReviewProgress = ReviewProgress(
+        invited = if (has("invited") && !isNull("invited")) optInt("invited") else null,
+        accepted = if (has("accepted") && !isNull("accepted")) optInt("accepted") else null,
+        reports = if (has("reports") && !isNull("reports")) optInt("reports") else null
+    )
+
     private fun JSONObject.toManuscript(): Manuscript {
         val h = optJSONArray("history") ?: JSONArray()
+        val links = optJSONArray("trackingSources") ?: JSONArray()
+        val reviewEvents = optJSONArray("reviewHistory") ?: JSONArray()
         return Manuscript(
             id = getString("id"),
             title = optString("title"),
@@ -118,6 +230,28 @@ object SubmissionStore {
             cssSelector = optString("cssSelector"),
             lastChecked = optLong("lastChecked"),
             lastError = optString("lastError"),
+            editorialMenuUrl = optString("editorialMenuUrl"),
+            currentFolder = optString("currentFolder"),
+            trackingSources = (0 until links.length()).mapNotNull { index ->
+                runCatching {
+                    val entry = links.getJSONObject(index)
+                    val url = entry.getString("url")
+                    TrackingSource(
+                        TrackingKind.entries.firstOrNull { it.name == entry.optString("kind") }
+                            ?: TrackingKind.fromUrl(url), url,
+                        entry.optString("lastStatus"), entry.optLong("lastChecked"),
+                        entry.optString("folder")
+                    )
+                }.getOrNull()
+            },
+            reviewProgress = optJSONObject("reviewProgress")?.toProgress() ?: ReviewProgress(),
+            reviewHistory = (0 until reviewEvents.length()).mapNotNull { index ->
+                runCatching {
+                    val event = reviewEvents.getJSONObject(index)
+                    ReviewEvent(event.optLong("at"), event.optString("source"),
+                        event.optJSONObject("progress")?.toProgress() ?: ReviewProgress())
+                }.getOrNull()
+            },
             history = (0 until h.length()).map { index ->
                 h.getJSONObject(index).let {
                     StatusEvent(it.optLong("at"), it.optString("from"), it.optString("to"), it.optString("source"))
