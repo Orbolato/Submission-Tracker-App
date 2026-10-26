@@ -39,3 +39,14 @@ Privacy: Use synthetic IDs and redacted screenshots when reporting issues. Never
 - Explicitly marked active steps in Elsevier tracking timelines can be recognized; the app deliberately avoids guessing from unmarked historical steps.
 
 Live Elsevier Author Hub markup remains unverified. Do not share real tracking tokens or private manuscript links in public issues.
+
+
+## v0.2.0-dev.1: Reviewer detail and journal discovery fixes
+
+- Author Hub reviewer counts now distinguish **Invited: 2+** from an exact invitation count of two. `Reviews completed: 0` is explicitly captured and shown as **Completed: 0**.
+- Author Hub can recognize an explicitly prominent **Under Review** banner even if the page does not contain a field literally labeled `Current status`. Recognition is conservative and may still require further live-page adaptation.
+- The **Tracking links** dialog now has a **Refresh tracking results** button, updates the visible list immediately after removing or adding a link, and keeps per-source error details visible.
+- The journal browser has a **Scan Editorial Manager folders** action. It uses folder links discovered from the **rendered, authenticated Author Main Menu** and only follows read-only, same-host GET links. For menus that navigate with JavaScript or form POSTs, browsing the folders manually inside the app now attempts to recognize the manuscript automatically after each folder opens.
+- This is a development build with `versionCode = 11`; the Android package identifier remains unchanged for in-place upgrades signed with the same local Android Studio key.
+
+**Verification:** Unit tests use synthetic Author Hub HTML corresponding to the visible labels `Review invitations sent: 2+`, `Review invitations accepted: 2`, and `Reviews completed: 0`. Real publisher navigation remains unverified. Do not share live tracking URLs or manuscript identifiers in public issues.
