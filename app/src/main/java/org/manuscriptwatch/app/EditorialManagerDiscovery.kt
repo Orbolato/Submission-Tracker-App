@@ -49,7 +49,40 @@ object EditorialManagerDiscovery {
         }.distinctBy { it.url }.take(12)
     }
 
-    fun isMenuPage(html: String, url: String): Boolean = folders(html, url).size >= 2
+    /** Recognize the author menu even when folder navigation is JavaScript/POST based.
+     * Detection does not imply that those links can be fetched automatically.
+     */
+    fun isMenuPage(html: String, url: String): Boolean {
+        if (!isEditorialManager(url)) return false
+        if (folders(html, url).size >= 2) return true
+        val doc = Jsoup.parse(html)
+        val menuTitle = doc.select("h1,h2,h3,h4,title,strong,header")
+            .any { it.text().contains("Author Main Menu", ignoreCase = true) }
+        val namedFolders = doc.select("a,button,li,[role=button]")
+            .map { it.text().trim().replace(Regex("\\s+"), " ") }
+            .filter { it.length in 6..100 && folderPattern.containsMatchIn(it) }
+            .distinct()
+        return menuTitle && namedFolders.size >= 2
+    }
+
+    /** Scan folder GET links extracted from the actual, signed-in WebView DOM.
+     * This avoids losing menus that are rendered with JavaScript after page load.
+     */
+    fun locateFromRenderedMenu(manuscript: Manuscript, menuUrl: String, html: String): Result {
+        if (!isEditorialManager(menuUrl)) return Result.NeedsAttention("Open an Editorial Manager author page first.")
+        val links = folders(html, menuUrl)
+        if (links.isEmpty()) return Result.NeedsAttention(
+            "Author menu detected, but its folders use JavaScript or form navigation. " +
+                "Open the folders normally inside this browser; Manuscript Watch will try to recognize your manuscript as each page loads."
+        )
+        return scanFolders(manuscript, links)
+    }
+
+    fun folderTitle(html: String): String {
+        val doc = Jsoup.parse(html)
+        return doc.select("h1,h2,h3,h4,header,strong").map { it.text().trim() }
+            .firstOrNull { it.length in 6..100 && folderPattern.containsMatchIn(it) }.orEmpty()
+    }
 
     fun nextPage(html: String, pageUrl: String): String? {
         val doc = Jsoup.parse(html, pageUrl)
@@ -86,6 +119,10 @@ object EditorialManagerDiscovery {
             if (direct is ExtractResult.Found) return Result.Located(Found(candidate, "Previously tracked folder", direct))
         }
         val links = menu?.second ?: return Result.NeedsAttention(lastError)
+        return scanFolders(manuscript, links)
+    }
+
+    private fun scanFolders(manuscript: Manuscript, links: List<FolderLink>): Result {
         val ordered = links.sortedByDescending { if (it.title.equals(manuscript.currentFolder, true)) 1 else 0 }
         for (folder in ordered) {
             var page = folder.url
