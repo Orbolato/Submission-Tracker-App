@@ -123,6 +123,14 @@ class BrowserActivity : ComponentActivity() {
                     Toast.makeText(this, "Author Main Menu saved. Tap Scan folders to look for this paper.", Toast.LENGTH_LONG).show()
                     return@evaluateJavascript
                 }
+                // A previously designated author menu is not a manuscript
+                // status page, even if its DOM has changed since it was saved.
+                if (EditorialManagerDiscovery.isEditorialManager(savedUrl) &&
+                    record.editorialMenuUrl == savedUrl) {
+                    pageHint.text = "Author Main Menu saved. Use Scan Editorial Manager folders " +
+                        "or open a manuscript folder to track its status."
+                    return@evaluateJavascript
+                }
                 SubmissionStore.addTrackingSource(this, record.id, savedUrl)
                 val source = TrackingSource(TrackingKind.fromUrl(savedUrl), savedUrl)
                 val parsed = if (!html.isNullOrEmpty() && html.length <= 1_700_000) {
@@ -155,7 +163,32 @@ class BrowserActivity : ComponentActivity() {
                 Toast.makeText(this, "Chrome login is separate: its session is not shared with automatic checks.", Toast.LENGTH_LONG).show()
             }
         }
+        // Explicit user choice: the author menu does not itself have a
+        // manuscript status. Save its entry URL without treating it as a failed
+        // source. Useful when Editorial Manager renders its menu in frames.
         outer.addView(toolbar)
+        outer.addView(Button(this).apply {
+            text = "Save Editorial Manager Author Main Menu"
+            textSize = 12f
+            isAllCaps = false
+            setOnClickListener {
+                val manuscriptId = intent.getStringExtra("manuscriptId").orEmpty()
+                val current = activeWebView().url.orEmpty()
+                if (!EditorialManagerDiscovery.isEditorialManager(current) ||
+                    manuscriptId.isBlank()) {
+                    pageHint.text = "Open the signed-in Editorial Manager Author Main Menu first."
+                    return@setOnClickListener
+                }
+                SubmissionStore.setEditorialMenu(this@BrowserActivity, manuscriptId, current)
+                CookieManager.getInstance().flush()
+                pageHint.text = "Author Main Menu URL saved. This is a navigation page, not " +
+                    "a manuscript status. Tap Scan Editorial Manager folders or open " +
+                    "Submissions Being Processed manually."
+                Toast.makeText(this@BrowserActivity,
+                    "Author Main Menu saved without requiring a status.",
+                    Toast.LENGTH_LONG).show()
+            }
+        }, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
         outer.addView(Button(this).apply {
             text = "Scan Editorial Manager folders"
             textSize = 12f
@@ -225,7 +258,8 @@ class BrowserActivity : ComponentActivity() {
                 pageHint.text = "The author menu was not readable yet. Let it load and tap Scan folders again."
                 return@evaluateJavascript
             }
-            if (!EditorialManagerDiscovery.isMenuPage(html, menuUrl)) {
+            if (!EditorialManagerDiscovery.isMenuPage(html, menuUrl) &&
+                manuscript.editorialMenuUrl != menuUrl) {
                 pageHint.text = "Open the Author Main Menu before scanning. The current page does not show recognizable folders."
                 return@evaluateJavascript
             }
