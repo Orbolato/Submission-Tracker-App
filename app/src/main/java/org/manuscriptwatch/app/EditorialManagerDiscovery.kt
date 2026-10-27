@@ -54,16 +54,23 @@ object EditorialManagerDiscovery {
      */
     fun isMenuPage(html: String, url: String): Boolean {
         if (!isEditorialManager(url)) return false
-        if (folders(html, url).size >= 2) return true
-        val doc = Jsoup.parse(html)
-        val menuTitle = doc.select("h1,h2,h3,h4,title,strong,header")
-            .any { it.text().contains("Author Main Menu", ignoreCase = true) }
-        val namedFolders = doc.select("a,button,li,[role=button]")
-            .map { it.text().trim().replace(Regex("\\s+"), " ") }
-            .filter { it.length in 6..100 && folderPattern.containsMatchIn(it) }
+        val doc = Jsoup.parse(html, url)
+        val namedFolders = doc.select("a,button,li,td,span,[role=button],[onclick]")
+            .map { it.ownText().trim().replace(Regex("\\s+"), " ") }
+            .filter { it.length in 6..120 && folderPattern.containsMatchIn(it) }
             .distinct()
-        return menuTitle && namedFolders.size >= 2
+        // Editorial Manager's "Author Main Menu" text may be in a regular div,
+        // not a heading. Many installations render the folders as POST controls
+        // or JavaScript actions, which are discoverable but not safe to crawl.
+        val visibleText = doc.body()?.text().orEmpty()
+        val authorMenu = Regex(
+            "(?i)\\b(author main menu|main menu for authors|author center|author centre)\\b"
+        ).containsMatchIn(visibleText)
+        return folders(html, url).size >= 2 ||
+            (authorMenu && namedFolders.isNotEmpty()) ||
+            namedFolders.size >= 3
     }
+
 
     /** Scan folder GET links extracted from the actual, signed-in WebView DOM.
      * This avoids losing menus that are rendered with JavaScript after page load.
