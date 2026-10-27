@@ -61,3 +61,14 @@ Live Elsevier Author Hub markup remains unverified. Do not share real tracking t
 - Increase Android versionCode to 12, versionName to `0.2.0-dev.2`, while retaining the same application ID for same-key updates.
 
 Actual Springer DOM layouts and live account session behavior still require an on-device check. Do not commit screenshots containing manuscript IDs or private tracking links.
+
+## v0.2.0-dev.4: Elsevier and Editorial Manager recognition hardening
+
+- Preserve the originally opened manuscript-specific Elsevier tracking URL when an Author Hub or article-production page updates its address to an otherwise identical, query-free route. Keep tracking identifiers local and never reuse them on a different host.
+- Recognize Editorial Manager author menus when the title is rendered as ordinary page text, or when several folder controls are rendered using JavaScript rather than direct links. The menu can be saved even if folder navigation is not safely automatable.
+- Add synthetic regression tests for query-preserving navigation, wrong-host rejection, and JavaScript-only Editorial Manager folder menus.
+- Android versionCode 14, versionName `0.2.0-dev.4`; same application ID and on-device data format.
+
+**Known limitation:** Editorial Manager menus requiring JavaScript or POST requests still cannot be searched completely by the read-only GET folder crawler. Opening the relevant folder manually remains a fallback. The publisher pages and login sessions are not available in CI, so passing synthetic tests does not prove live compatibility.
+
+**Testing:** Install from the same Android Studio signing key as the previous version, open the existing Elsevier tracking link using **Tracking links → Open tracking page → Track page**, then review its individual check result. On Editorial Manager, open the signed-in **Author Main Menu**, select **Track page**, and use **Scan Editorial Manager folders**. If either fails, share only the error text with tracking IDs redacted.
