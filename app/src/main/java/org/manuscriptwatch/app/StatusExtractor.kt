@@ -50,7 +50,9 @@ object StatusExtractor {
         val needle = manuscriptId.lowercase().trim()
         val directSpringer = JournalPageClassifier.isSpringerSubmissionDetail(pageUrl)
         try {
-            if (selector.isNotBlank()) {
+            // Legacy CSS selectors from earlier versions must not block the
+            // modern Springer detail-page extractor or its reviewer counters.
+            if (selector.isNotBlank() && !directSpringer) {
                 val matches = doc.select(selector)
                 if (matches.isEmpty()) return ExtractResult.NeedsAttention("A previously saved custom detection rule did not find the status. The journal page may have changed.")
                 val connected = matches.filter { candidate ->
@@ -134,6 +136,17 @@ object StatusExtractor {
     }
 
     private fun extractDetailStatus(doc: org.jsoup.nodes.Document): String? {
+        // SNAPP shows "CURRENT STATUS" separately from its main heading.
+        // The heading is the explicit current status of this one submission.
+        for (heading in doc.select("h1,h2,h3,h4")) {
+            val headingText = heading.text().trim().replace(Regex("\\s+"), " ")
+            if (headingText.length !in 15..110) continue
+            if (Regex("(?i)^your (?:submission|manuscript) (?:is|has been) " +
+                    "(?:in |under |sent for )?(?:peer review|editorial review|review|" +
+                    "accepted|rejected|submitted|in production).*$").matches(headingText)) {
+                return headingText
+            }
+        }
         // Explicit status data fields are stronger evidence than a generic page-wide phrase.
         val namedStatus = doc.select("[data-testid*=status], [data-test*=status], [aria-label*=status], [class*=status], [id*=status]")
         for (node in namedStatus) {
