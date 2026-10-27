@@ -76,6 +76,16 @@ class StatusExtractorTest {
         assertEquals(null, parsed.reviewProgress?.reports)
     }
 
+    @Test fun editorialManagerIgnoresLegacySelectorThatNoLongerMatches() {
+        val page = """<table>
+            <tr><th>Manuscript Number</th><th>Current Status</th></tr>
+            <tr><td>TEST-JOURNAL-0001</td><td>With Editor</td></tr>
+        </table>"""
+        val result = StatusExtractor.extract(page, "TEST-JOURNAL-0001",
+            ".old-selector", "https://www.editorialmanager.com/demo/processing")
+        assertEquals("With Editor", (result as ExtractResult.Found).status)
+    }
+
     @Test fun readsEditorialManagerCardWithManuscriptSpecificStatus() {
         val page = """<html><body><div role='grid'>
           <div role='row'><span>DEMO-D-26-00001</span>
