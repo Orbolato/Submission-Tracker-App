@@ -94,7 +94,12 @@ class BrowserActivity : ComponentActivity() {
                 return@action
             }
             val record = SubmissionStore.all(this).find { it.id == manuscriptId } ?: return@action
-            val savedUrl = JournalPageClassifier.canonicalStatusUrl(current)
+            val openedUrl = intent.getStringExtra("url").orEmpty()
+            // Preserve the manuscript-specific URL of Elsevier SPAs when the
+            // address bar is rewritten to a query-free same-host route.
+            val savedUrl = JournalPageClassifier.canonicalStatusUrl(
+                TrackingSources.preserveOpenedElsevierLink(current, openedUrl)
+            )
             CookieManager.getInstance().flush()
             // Unlike the worker's plain HTTP request, this captures the live DOM after
             // React/other client-side rendering. Does not log or persist the HTML.
