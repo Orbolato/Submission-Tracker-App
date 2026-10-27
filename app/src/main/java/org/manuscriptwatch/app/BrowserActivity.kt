@@ -145,15 +145,9 @@ class BrowserActivity : ComponentActivity() {
                     Toast.makeText(this, "Author Main Menu saved. Tap Scan folders to look for this paper.", Toast.LENGTH_LONG).show()
                     return@evaluateJavascript
                 }
-                // A previously designated author menu is not a manuscript
-                // status page, even if its DOM has changed since it was saved.
-                if (EditorialManagerDiscovery.isEditorialManager(savedUrl) &&
-                    record.editorialMenuUrl == savedUrl) {
-                    pageHint.text = "Author Main Menu saved. Use Scan Editorial Manager folders " +
-                        "or open a manuscript folder to track its status."
-                    return@evaluateJavascript
-                }
-                SubmissionStore.addTrackingSource(this, record.id, savedUrl)
+                // Editorial Manager may reuse the same URL for menu and folder
+                // POST navigation. Recognize the rendered page before deciding
+                // whether this URL represents a status source or only the menu.
                 val source = TrackingSource(TrackingKind.fromUrl(savedUrl), savedUrl)
                 val parsed = if (!html.isNullOrEmpty() && html.length <= 1_700_000) {
                     if (source.kind == TrackingKind.ELSEVIER_HUB || source.kind == TrackingKind.ELSEVIER_PRODUCTION)
@@ -161,11 +155,23 @@ class BrowserActivity : ComponentActivity() {
                     else StatusExtractor.extract(html, record.manuscriptId, record.cssSelector, savedUrl)
                 } else ExtractResult.NeedsAttention("Page HTML unavailable or exceeds 1.7 MB.")
                 if (parsed is ExtractResult.Found) {
+                    SubmissionStore.addTrackingSource(this, record.id, savedUrl)
                     SubmissionStore.observeSource(this, record.id, source, parsed)
                         .forEach { AppNotifications.notifyChange(this, it) }
                     Toast.makeText(this, "Tracking started: ${parsed.status}", Toast.LENGTH_LONG).show()
                     finish()
                 } else {
+                    // Never re-add a previously saved author menu as a failed
+                    // manuscript source. Its URL might also serve real folders.
+                    if (EditorialManagerDiscovery.isEditorialManager(savedUrl) &&
+                        record.editorialMenuUrl == savedUrl) {
+                        pageHint.text = "This journal URL is saved as the Author Main Menu. " +
+                            "No manuscript status was found on the current view. " +
+                            "Open Submissions Being Processed or another folder, " +
+                            "wait for the manuscript row, and tap Track page again."
+                        return@evaluateJavascript
+                    }
+                    SubmissionStore.addTrackingSource(this, record.id, savedUrl)
                     val issue = parsed as ExtractResult.NeedsAttention
                     issue.reviewProgress?.let { SubmissionStore.observeReviewProgress(this, record.id, source, it) }
                     SubmissionStore.recordSourceError(this, record.id, source, issue.reason)
