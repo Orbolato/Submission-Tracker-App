@@ -10,6 +10,9 @@ The current implementation focuses on **Springer Nature** and **Elsevier / Edito
 ## Features
 
 - Track manuscript titles, journals, identifiers, submission links, and current statuses.
+- Save multiple tracking sources per manuscript and inspect each source’s last check and error separately.
+- Capture explicitly displayed peer-review counts (invitations sent, acceptances, and completed reports) with local observation history; undisclosed completed counts remain **Not displayed**.
+- Interpret dated post-acceptance milestones from supported Elsevier article-production tracking pages.
 - Open a journal's website inside the app and save its manuscript-status page with **Track page**, without entering HTML or CSS selectors.
 - Read supported status pages, including JavaScript-rendered Springer Nature submission-detail pages, using the app's authenticated WebView session.
 - Preserve a local status history and send Android notifications when a website check detects a change.
@@ -22,8 +25,10 @@ The current implementation focuses on **Springer Nature** and **Elsevier / Edito
 
 | Website or feature | Current approach | Limitations |
 |---|---|---|
-| Springer Nature submissions | WebView/JavaScript monitoring of individual `submission-details/` pages | Depends on an authorized session, the site's page structure, and Android background execution |
-| Elsevier / Editorial Manager | Authenticated HTML retrieval and manuscript-specific status extraction | Journal-specific layouts, redirects, or JavaScript pages may not work |
+| Springer Nature submissions | WebView/JavaScript monitoring of individual `submission-details/` pages and explicit reviewer-count sentences | Depends on an authorized session, the site’s page structure, and Android background execution |
+| Elsevier Author Hub | Renders submission tracking pages and extracts explicit editorial status and reviewer counts | Site layouts and access requirements can change; successful capture is not guaranteed |
+| Elsevier Track Your Accepted Article | Reads dated events in the production timeline, retaining a separate production-source status | Event wording varies; the newest recognized event is a production milestone, not necessarily the editorial decision |
+| Elsevier Editorial Manager | Manuscript-specific status extraction and discovery from accessible author folders | JavaScript- or POST-only navigation may require opening the folder manually inside the app |
 | Other editorial systems | Experimental generic HTML checking | No verified publisher-specific adapter |
 | ORCID | Interactive login on publisher websites; optional encrypted local credentials | ORCID does not provide a universal API for private submission statuses or unattended login |
 
