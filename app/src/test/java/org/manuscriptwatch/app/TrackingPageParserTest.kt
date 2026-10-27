@@ -9,6 +9,25 @@ class TrackingPageParserTest {
     private val authorHub = "https://track.authorhub.elsevier.com/?uuid=11111111-2222-4333-8444-555555555555"
     private val production = "https://authors.elsevier.com/tracking/article/details.do?aid=000000&jid=DEMO&surname=Example"
 
+    @Test fun retainsElsevierIdentityWhenSinglePageAppDropsQuery() {
+        val opened = authorHub
+        assertEquals(opened, TrackingSources.preserveOpenedElsevierLink(
+            "https://track.authorhub.elsevier.com/", opened
+        ))
+        assertEquals(production, TrackingSources.preserveOpenedElsevierLink(
+            "https://authors.elsevier.com/tracking/article/details.do", production
+        ))
+    }
+
+    @Test fun doesNotReuseTrackingTokenOnUnrelatedHostOrManuscript() {
+        assertEquals("https://other.invalid/", TrackingSources.preserveOpenedElsevierLink(
+            "https://other.invalid/", authorHub
+        ))
+        val differentTrackingUrl = "https://track.authorhub.elsevier.com/?uuid=22222222-3333-4444-8555-666666666666"
+        assertEquals(differentTrackingUrl,
+            TrackingSources.preserveOpenedElsevierLink(differentTrackingUrl, authorHub))
+    }
+
     @Test fun recognizesPublicElsevierTrackingSources() {
         assertEquals(TrackingKind.ELSEVIER_HUB, TrackingKind.fromUrl(authorHub))
         assertEquals(TrackingKind.ELSEVIER_PRODUCTION, TrackingKind.fromUrl(production))
