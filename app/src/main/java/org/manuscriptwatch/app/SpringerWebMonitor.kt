@@ -142,7 +142,7 @@ object SpringerWebMonitor {
                             else bestFound?.takeIf { it.reviewProgress != null } ?: parsed
                         if (firstStatusPoll == null) firstStatusPoll = polls
                         if (bestFound?.reviewProgress != null ||
-                            polls - (firstStatusPoll ?: polls) >= 3) {
+                            polls - (firstStatusPoll ?: polls) >= 7) {
                             finish(bestFound!!)
                             return@evaluateJavascript
                         }
