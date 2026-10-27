@@ -312,6 +312,9 @@ class BrowserActivity : ComponentActivity() {
         if (!EditorialManagerDiscovery.isEditorialManager(pageUrl)) return
         val recordId = intent.getStringExtra("manuscriptId") ?: return
         val manuscript = SubmissionStore.all(this).find { it.id == recordId } ?: return
+        // AJAX-driven folder lists can populate after onPageFinished.
+        // Retry a few times without submitting forms or changing page state.
+        for (retryDelay in listOf(1800L, 4500L, 8000L)) {
         view.postDelayed({
             if (view.url != pageUrl || isFinishing || isDestroyed) return@postDelayed
             view.evaluateJavascript(pageSnapshotScript()
@@ -332,7 +335,8 @@ class BrowserActivity : ComponentActivity() {
                     pageHint.text = "Manuscript recognized in ${folder.ifBlank { "an Editorial Manager folder" }}: ${parsed.status}."
                 }
             }
-        }, 1800L)
+        }, retryDelay)
+        }
     }
 
     /** User-triggered only; never inject passwords into a publisher or arbitrary redirect. */
