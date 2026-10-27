@@ -42,6 +42,36 @@ class BrowserActivity : ComponentActivity() {
 
     private fun activeWebView(): WebView = popupStack.lastOrNull() ?: primary
 
+    /** Read a redacted DOM snapshot from the selected WebView. Editorial Manager
+     * often places its menu and manuscript table in same-origin frames.
+     * No HTML is logged or persisted, and cross-origin frames are never read.
+     */
+    private fun pageSnapshotScript(): String = """(function(){
+        if (!document.body || location.protocol !== 'https:') return '';
+        function clean(body) {
+            var copy=body.cloneNode(true);
+            copy.querySelectorAll('script,style,svg,noscript,input,textarea').forEach(function(e){e.remove();});
+            return copy;
+        }
+        var root=clean(document.body);
+        var host=location.hostname.toLowerCase();
+        if (host==='editorialmanager.com' || host.endsWith('.editorialmanager.com')) {
+            for (var frame of document.querySelectorAll('iframe,frame')) {
+                try {
+                    var frameDoc=frame.contentDocument;
+                    if(!frameDoc || !frameDoc.body || frameDoc.location.origin!==location.origin) continue;
+                    var wrapper=document.createElement('section');
+                    wrapper.setAttribute('data-mw-editorial-frame','true');
+                    wrapper.appendChild(clean(frameDoc.body));
+                    root.appendChild(wrapper);
+                } catch(e) { /* Ignore cross-origin and inaccessible frames. */ }
+            }
+        }
+        var output=root.outerHTML;
+        return output.length<=1700000?output:'';
+    })()""".trimIndent()
+
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -103,15 +133,7 @@ class BrowserActivity : ComponentActivity() {
             CookieManager.getInstance().flush()
             // Unlike the worker's plain HTTP request, this captures the live DOM after
             // React/other client-side rendering. Does not log or persist the HTML.
-            activeWebView().evaluateJavascript(
-                """(function(){
-                    var b=document.body;
-                    if(!b) return '';
-                    var c=b.cloneNode(true);
-                    c.querySelectorAll('script,style,svg,noscript').forEach(function(e){e.remove();});
-                    var h=c.outerHTML;
-                    return h.length<=1700000 ? h : '';
-                })()""".trimIndent()
+            activeWebView().evaluateJavascript(pageSnapshotScript()
             ) { result ->
                 val html = runCatching { JSONTokener(result).nextValue() as? String }.getOrNull()
                 if (!html.isNullOrEmpty() &&
@@ -245,13 +267,7 @@ class BrowserActivity : ComponentActivity() {
         }
         if (folderScanRunning) return
         val manuscript = SubmissionStore.all(this).find { it.id == recordId } ?: return
-        view.evaluateJavascript(
-            """(function(){
-                if (!document.body) return '';
-                var c=document.body.cloneNode(true);
-                c.querySelectorAll('script,style,svg,noscript').forEach(function(e){e.remove();});
-                var h=c.outerHTML;return h.length<=1700000?h:'';
-            })()""".trimIndent()
+        view.evaluateJavascript(pageSnapshotScript()
         ) { result ->
             val html = runCatching { JSONTokener(result).nextValue() as? String }.getOrNull()
             if (html.isNullOrEmpty()) {
@@ -298,13 +314,7 @@ class BrowserActivity : ComponentActivity() {
         val manuscript = SubmissionStore.all(this).find { it.id == recordId } ?: return
         view.postDelayed({
             if (view.url != pageUrl || isFinishing || isDestroyed) return@postDelayed
-            view.evaluateJavascript(
-                """(function(){
-                    if (!document.body) return '';
-                    var c=document.body.cloneNode(true);
-                    c.querySelectorAll('script,style,svg,noscript').forEach(function(e){e.remove();});
-                    var h=c.outerHTML;return h.length<=1700000?h:'';
-                })()""".trimIndent()
+            view.evaluateJavascript(pageSnapshotScript()
             ) { encoded ->
                 if (view.url != pageUrl) return@evaluateJavascript
                 val html = runCatching { JSONTokener(encoded).nextValue() as? String }.getOrNull()
