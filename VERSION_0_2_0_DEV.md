@@ -93,3 +93,16 @@ Actual Springer DOM layouts and live account session behavior still require an o
 5. Check each source's **Tracking links → Refresh tracking results** information. Redact all manuscript IDs, tracking tokens and private links from bug reports.
 
 The automatic Editorial Manager scanner remains limited to safe, authenticated, same-host GET navigation. A successful CI build and synthetic tests do not establish compatibility with live, journal-specific JavaScript or POST folder navigation.
+
+## v0.2.0-dev.6: Elsevier Track Your Accepted Article production milestones
+
+- Recognize the **Production events** timeline on `authors.elsevier.com/tracking/article/details.do` as a source of dated post-acceptance milestones. This page does not always expose a separate current-status label.
+- Parse the explicit event date and description, and use the newest recognized milestone as the **Elsevier article production** source status. Keep Editorial Manager's **Completed - Accept** decision as a separate source result.
+- For the synthetic example corresponding to the supplied screenshot, display **Printed journal shipped to subscribers (14 Sep 2026)**; earlier entries include final online publication, proof corrections, and receipt for production. **This screenshot is an example from a different article, not a verified status for the separately supplied tracking URL.**
+- Support day/month/year that appears in separate HTML elements or lines, and sort by actual dates rather than trusting visual ordering.
+- Never infer an event from a date alone; recognition is limited to explicitly dated, named production milestones.
+- Keep the existing explicit-status fallback for accepted-article pages that do not use this timeline.
+- Synthetic regression tests cover the complete screenshot-based timeline, out-of-order dates, final-publication precedence, wrong page category, and missing event dates.
+- `versionCode = 16`, `versionName = "0.2.0-dev.6"`, same Android package ID.
+
+**Live publisher validation remains outstanding.** The personal tracking URL could not be opened through the research service. Test the latest development build with the signed-in or accessible production tracking page in Manuscript Watch. The example paper shown in the screenshot must not be conflated with the actual target article.
