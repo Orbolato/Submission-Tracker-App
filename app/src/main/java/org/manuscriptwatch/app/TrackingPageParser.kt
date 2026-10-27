@@ -112,7 +112,15 @@ object TrackingPageParser {
         if (Regex("(?i)captcha|verify you are human|access denied").containsMatchIn(text)) {
             return ExtractResult.NeedsAttention("Tracking website requires manual verification.")
         }
-        val status = explicitStatus(doc) ?: activeTimelineStage(doc) ?: clearlyLabeledBanner(doc)
+        // The accepted-article tracker uses a dated "Production events" list.
+        // Its latest dated event is more informative than an absent status field.
+        val productionEvent = if (kind == TrackingKind.ELSEVIER_PRODUCTION)
+            ElsevierProductionEvents.latest(html) else null
+        val status = productionEvent?.let {
+            val date = it.date.format(java.time.format.DateTimeFormatter.ofPattern(
+                "d MMM uuuu", java.util.Locale.US))
+            "${it.description} ($date)"
+        } ?: explicitStatus(doc) ?: activeTimelineStage(doc) ?: clearlyLabeledBanner(doc)
         val progress = reviewProgress(html)
         if (status != null) return ExtractResult.Found(status, progress)
         return ExtractResult.NeedsAttention(
