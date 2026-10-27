@@ -84,8 +84,11 @@ object TrackingSources {
             !current.host.equals(opened.host, true) ||
             current.userInfo != null || current.port !in setOf(-1, 443))
             return currentUrl
-        return if (TrackingKind.fromUrl(currentUrl) == TrackingKind.JOURNAL &&
-            current.rawQuery.isNullOrBlank()) openedUrl else currentUrl
+        // Author Hub and Track Your Article can keep the same route while
+        // clearing identifying query parameters. Keep the original saved link.
+        val sameRoute = current.path?.trimEnd('/') == opened.path?.trimEnd('/')
+        return if (sameRoute && current.rawQuery.isNullOrBlank() &&
+            !opened.rawQuery.isNullOrBlank()) openedUrl else currentUrl
     }
 
     fun isSupportedUrl(url: String): Boolean {
