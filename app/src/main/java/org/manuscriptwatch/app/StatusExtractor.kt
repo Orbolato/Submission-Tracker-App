@@ -84,7 +84,14 @@ object StatusExtractor {
             )
         }
 
-        val row = doc.select("tr").firstOrNull { it.text().lowercase().contains(needle) }
+        // Match identifiers in row-like containers even when punctuation or
+        // spaces in Editorial Manager are inconsistent.
+        fun normalizedId(value: String): String =
+            value.uppercase().replace(Regex("[^A-Z0-9]"), "")
+        val canonicalId = normalizedId(needle)
+        fun matchesId(value: String): Boolean =
+            canonicalId.length >= 5 && normalizedId(value).contains(canonicalId)
+        val row = doc.select("tr").firstOrNull { matchesId(it.text()) }
         if (row != null) {
             val table = row.closest("table")
             val headers = table?.select("tr")?.firstOrNull { it.select("th").isNotEmpty() }
@@ -101,6 +108,27 @@ object StatusExtractor {
             }
             knownStatus(row.text())?.let { return ExtractResult.Found(it) }
         }
+        // Some Editorial Manager installations render compact manuscript cards
+        // or ARIA grid rows instead of tables. Only inspect a container that
+        // includes this manuscript's exact normalized identifier.
+        val candidates = doc.select("[role=row],article,li,[data-manuscript-id],[data-testid*=submission]")
+            .filter { candidate ->
+                val rowText = candidate.text().trim()
+                rowText.length in 8..1200 && matchesId(rowText)
+            }.sortedBy { it.text().length }
+        for (candidate in candidates) {
+            val candidateText = candidate.text().trim()
+            candidate.select("[class*=status],[id*=status],[aria-label*=status],[data-testid*=status]")
+                .firstOrNull { it.text().length in 3..100 }?.let {
+                    knownStatus(it.text())?.let { status -> return ExtractResult.Found(status) }
+                }
+            val labeled = Regex(
+                "(?i)\\bcurrent\\s+status\\s*[:–-]\\s*([^|;]{3,90})"
+            ).find(candidateText)?.groupValues?.get(1)?.trim()
+            if (labeled != null) knownStatus(labeled)?.let { return ExtractResult.Found(it) }
+            knownStatus(candidateText)?.let { return ExtractResult.Found(it) }
+        }
+
         // Do not scan entire page for phrases: other manuscripts may have different statuses.
         return ExtractResult.NeedsAttention("Could not match this manuscript to a status on the selected page. Open the manuscript's own status page in the journal browser and tap Track page after it loads.")
     }
