@@ -52,7 +52,11 @@ object StatusExtractor {
         try {
             // Legacy CSS selectors from earlier versions must not block the
             // modern Springer detail-page extractor or its reviewer counters.
-            if (selector.isNotBlank() && !directSpringer) {
+            // Editorial Manager folder layouts change frequently. A stale
+            // selector saved by an older app version must not bypass the
+            // manuscript-specific table/card extraction below.
+            if (selector.isNotBlank() && !directSpringer &&
+                kind != TrackingKind.EDITORIAL_MANAGER) {
                 val matches = doc.select(selector)
                 if (matches.isEmpty()) return ExtractResult.NeedsAttention("A previously saved custom detection rule did not find the status. The journal page may have changed.")
                 val connected = matches.filter { candidate ->
