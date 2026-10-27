@@ -72,3 +72,24 @@ Actual Springer DOM layouts and live account session behavior still require an o
 **Known limitation:** Editorial Manager menus requiring JavaScript or POST requests still cannot be searched completely by the read-only GET folder crawler. Opening the relevant folder manually remains a fallback. The publisher pages and login sessions are not available in CI, so passing synthetic tests does not prove live compatibility.
 
 **Testing:** Install from the same Android Studio signing key as the previous version, open the existing Elsevier tracking link using **Tracking links → Open tracking page → Track page**, then review its individual check result. On Editorial Manager, open the signed-in **Author Main Menu**, select **Track page**, and use **Scan Editorial Manager folders**. If either fails, share only the error text with tracking IDs redacted.
+
+## v0.2.0-dev.5: Editorial Manager and Springer regression recovery
+
+- Correct the Editorial Manager page classifier so a real **Submissions Being Processed** folder, with multiple navigation links, is not incorrectly treated as the **Author Main Menu**.
+- Add an explicit **Save Editorial Manager Author Main Menu** button. The menu is a navigation page and must never be treated as a failed manuscript-status extraction.
+- Read the rendered page and accessible same-origin frames in the in-app WebView; never read cross-origin frames or log/persist the captured HTML.
+- Recognize manuscript-scoped table rows and ARIA/card rows in Editorial Manager; bypass legacy CSS selectors from older app versions for supported Editorial Manager and Springer pages.
+- Retry read-only parsing of manually visited folder pages after delayed JavaScript content appears, without submitting forms.
+- Recognize Springer's explicit **Your submission is in peer review** headline and reviewer-count sentences, preserving an absent completed-review count as **Not displayed**.
+- Add synthetic regression tests for a real-looking Springer status/news card and an Editorial Manager folder with Author Main Menu links in its navigation.
+- `versionCode = 15`, `versionName = "0.2.0-dev.5"`. The package ID and on-device data format remain unchanged.
+
+### On-device validation
+
+1. Install via the same Android Studio signing key **without uninstalling** the existing app.
+2. In the in-app Editorial Manager browser, navigate to the actual **Author Main Menu**, then select **Save Editorial Manager Author Main Menu**, followed by **Scan Editorial Manager folders**.
+3. If the scanner reports JavaScript/POST navigation, open **Submissions Being Processed** yourself in the same browser and let the content load; a delayed status check will attempt to recognize the manuscript. Select **Track page** to capture it explicitly.
+4. Open the Springer submission-detail page **inside Manuscript Watch** (Chrome's cookies are separate), wait until the reviewer-news card appears, then select **Track page**. The synthetic example should show Invited 6, Accepted 1, Completed Not displayed.
+5. Check each source's **Tracking links → Refresh tracking results** information. Redact all manuscript IDs, tracking tokens and private links from bug reports.
+
+The automatic Editorial Manager scanner remains limited to safe, authenticated, same-host GET navigation. A successful CI build and synthetic tests do not establish compatibility with live, journal-specific JavaScript or POST folder navigation.
