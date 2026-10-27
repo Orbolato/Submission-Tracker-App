@@ -36,7 +36,7 @@ The current implementation focuses on **Springer Nature** and **Elsevier / Edito
 
 Manuscript status monitoring is **best effort**. Android may delay periodic checks, and websites can restrict automated access. Verify important decisions and deadlines directly with the journal. Use polling responsibly and respect publisher terms.
 
-## Manual backup and restore (v0.2.0 release candidate)
+## Manual backup and restore (v0.2.0)
 
 From the dashboard, select **Backup records**, confirm that the file contains sensitive manuscript information, and choose a private storage location using Android's document picker. To recover data, select **Restore records**, choose a JSON backup, review the manuscript count, and explicitly confirm replacement.
 
@@ -68,7 +68,7 @@ The resulting file is `app/build/outputs/apk/debug/app-debug.apk`.
 
 The [Build Android APK workflow](https://github.com/Orbolato/Submission-Tracker-App/actions/workflows/build-apk.yml) runs unit tests and builds a downloadable **debug APK**. Find it in the successful run's **Artifacts** section. This is not a signed production release.
 
-**Updating an installed app:** debug builds from GitHub and your PC may use different signing keys. An APK signed by a different key cannot replace an existing installation while preserving app data. Do not uninstall an existing installation just to force an update: local manuscript records, status history, encrypted credentials, and publisher sessions would be lost. See [phone installation instructions](PHONE_INSTALL.md).
+**Updating an installed app:** debug builds from GitHub and your PC may use different signing keys. An APK signed by a different key cannot replace an existing installation while preserving app data. Do not uninstall an existing installation just to force an update: local manuscript records, status history, encrypted credentials, and publisher sessions would be lost. The **v0.2.0 GitHub release is source-only**, not a production-signed APK. See [phone installation instructions](PHONE_INSTALL.md) and [release-signing and migration guidance](RELEASE_SIGNING.md).
 
 ## Getting started
 
@@ -84,7 +84,7 @@ If the app cannot identify an unambiguous status or the login session expires, i
 - The app uses on-device app-private storage. Manuscript metadata is **not separately encrypted**; protect your device with a screen lock and Android device encryption.
 - ORCID credential storage is optional and uses AES-GCM encryption with an Android Keystore key. Saved credentials are only filled after a user action on verified ORCID pages, not by automatic background login.
 - Publisher sessions use WebView cookie storage, which is independent of Chrome.
-- Android automatic app backup is disabled. User-initiated, unencrypted JSON export and confirmed restore are available in the v0.2.0 release candidate. There is no synchronization server or email monitoring.
+- Android automatic app backup is disabled. User-initiated, unencrypted JSON export and confirmed restore are available in v0.2.0. There is no synchronization server or email monitoring.
 - Never include private manuscript IDs, tracking URLs, passwords, cookies, access tokens, or keystores in issues, commits, or shared screenshots.
 
 For vulnerability reporting, see [SECURITY.md](SECURITY.md).
@@ -93,7 +93,7 @@ For vulnerability reporting, see [SECURITY.md](SECURITY.md).
 
 The project is a research-oriented prototype and is **not affiliated with or endorsed by Springer Nature, Elsevier, ORCID, or any publisher**. Its core source is under `app/src/main/java/org/manuscriptwatch/app/`, with tests under `app/src/test/`.
 
-Contributions and reproducible, **redacted** bug reports are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md), and read the [v0.1.8 release notes](RELEASE_NOTES_0_1_8.md) for current scope. Previous engineering notes are retained in the version-specific Markdown files.
+Contributions and reproducible, **redacted** bug reports are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md), and read the [v0.2.0 release notes](RELEASE_NOTES_0_2_0.md) for current scope. Prior [v0.1.8 release notes](RELEASE_NOTES_0_1_8.md) and engineering notes remain available.
 
 ## License
 
