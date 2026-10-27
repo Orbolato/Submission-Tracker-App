@@ -16,6 +16,7 @@ The current implementation focuses on **Springer Nature** and **Elsevier / Edito
 - Schedule checks with Android WorkManager (selectable intervals of 1, 3, 6, 12, or 24 hours; default: 3 hours).
 - Optionally store ORCID credentials encrypted with Android Keystore for **user-triggered** autofill on verified ORCID login pages.
 - Store manuscript information locally, without an application account, analytics service, or email-monitoring integration.
+- Export manuscript records, tracking sources, status/reviewer histories, and the check interval to a user-selected JSON backup; restore after validation and explicit replacement confirmation. Passwords and browser sessions are never exported.
 
 ## Current support and limitations
 
@@ -29,6 +30,14 @@ The current implementation focuses on **Springer Nature** and **Elsevier / Edito
 **Important:** This project does not automatically discover manuscripts from ORCID. Website access requires you to sign in through each authorized journal portal. Browser sessions may expire. CAPTCHA, multi-factor authentication, and other interactive steps are not bypassed. The app does not silently submit saved ORCID credentials.
 
 Manuscript status monitoring is **best effort**. Android may delay periodic checks, and websites can restrict automated access. Verify important decisions and deadlines directly with the journal. Use polling responsibly and respect publisher terms.
+
+## Manual backup and restore (v0.2.0 release candidate)
+
+From the dashboard, select **Backup records**, confirm that the file contains sensitive manuscript information, and choose a private storage location using Android's document picker. To recover data, select **Restore records**, choose a JSON backup, review the manuscript count, and explicitly confirm replacement.
+
+**Restoring replaces the entire set of locally saved manuscripts**, including per-source observations and histories. It is not a merge. The app validates the backup's format, size (2 MB limit), manuscript identifiers, and tracking URLs before writing it. Keep a second copy of an existing backup before trying restore for the first time. Do not uninstall your existing app just to test restore.
+
+Backups are **not encrypted**. They may include manuscript identifiers, journal and tracking URLs (including private tokens embedded in URLs), statuses, and review histories. Store them securely and do not upload them to public repositories or issue trackers. **ORCID credentials, Android Keystore keys, browser cookies, and publisher sessions are excluded**; after moving to a different phone, sign in to journal websites again. Android automatic app backup remains disabled.
 
 ## Requirements
 
@@ -70,7 +79,7 @@ If the app cannot identify an unambiguous status or the login session expires, i
 - The app uses on-device app-private storage. Manuscript metadata is **not separately encrypted**; protect your device with a screen lock and Android device encryption.
 - ORCID credential storage is optional and uses AES-GCM encryption with an Android Keystore key. Saved credentials are only filled after a user action on verified ORCID pages, not by automatic background login.
 - Publisher sessions use WebView cookie storage, which is independent of Chrome.
-- App backups are disabled. There is no synchronization server or email monitoring.
+- Android automatic app backup is disabled. User-initiated, unencrypted JSON export and confirmed restore are available in the v0.2.0 release candidate. There is no synchronization server or email monitoring.
 - Never include private manuscript IDs, tracking URLs, passwords, cookies, access tokens, or keystores in issues, commits, or shared screenshots.
 
 For vulnerability reporting, see [SECURITY.md](SECURITY.md).
