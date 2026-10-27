@@ -28,7 +28,7 @@ object ElsevierProductionEvents {
     )
 
     private val datePattern = Regex(
-        """(?i)(?<![a-z0-9])(\d{1,2})\s+([a-z]{3,9})\s+(\d{4})(?!\d)"""
+        """(?i)(?<![a-z0-9])(\d{1,2})\s+([a-z]{3,9})\s*(\d{4})(?!\d)"""
     )
     private val monthNumbers = listOf(
         "jan", "feb", "mar", "apr", "may", "jun",
