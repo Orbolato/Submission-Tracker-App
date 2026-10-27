@@ -62,6 +62,18 @@ object SubmissionStore {
         write(context, current)
     }
 
+    /** Called only after ManuscriptBackup validated the full snapshot.
+     * Use the same lock as normal manuscript writes, and commit records plus
+     * polling interval together so a concurrent check cannot see partial data.
+     */
+    internal fun replaceFromValidatedBackup(context: Context, entriesJson: String,
+                                            intervalHours: Long): Boolean = synchronized(lock) {
+        prefs(context).edit()
+            .putString(ENTRIES, entriesJson)
+            .putLong(INTERVAL, intervalHours)
+            .commit()
+    }
+
     fun delete(context: Context, id: String) = synchronized(lock) {
         write(context, all(context).filterNot { it.id == id })
     }
