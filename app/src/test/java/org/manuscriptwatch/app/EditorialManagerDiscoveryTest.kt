@@ -45,6 +45,27 @@ class EditorialManagerDiscoveryTest {
         assertTrue((answer as EditorialManagerDiscovery.Result.NeedsAttention).reason.contains("JavaScript"))
     }
 
+    @Test fun recognizesAuthorMenuWhenHeadingIsPlainDivAndFoldersAreButtons() {
+        val markup = """<html><body>
+          <div class='page-title'>Author Main Menu</div>
+          <div><button onclick='openFolder(1)'>Submissions Being Processed</button></div>
+          <div><button onclick='openFolder(2)'>Revisions Being Processed</button></div>
+        </body></html>"""
+        assertTrue(EditorialManagerDiscovery.isMenuPage(markup, menu))
+        // A JavaScript action does not qualify as a safe GET URL.
+        assertTrue(EditorialManagerDiscovery.folders(markup, menu).isEmpty())
+    }
+
+    @Test fun recognizesSeveralAuthorFolderOptionsWithoutExplicitHeading() {
+        val markup = """<html><body><nav>
+          <a href='javascript:go(1)'>Submissions Being Processed</a>
+          <a href='javascript:go(2)'>Revisions Being Processed</a>
+          <a href='javascript:go(3)'>Submissions with a Decision</a>
+        </nav></body></html>"""
+        assertTrue(EditorialManagerDiscovery.isMenuPage(markup, menu))
+        assertTrue(EditorialManagerDiscovery.folders(markup, menu).isEmpty())
+    }
+
     @Test fun recognizesFolderTitleForPassiveCapture() {
         val page = "<h2>Submissions Being Processed</h2><table><tr><th>Status</th></tr></table>"
         assertEquals("Submissions Being Processed", EditorialManagerDiscovery.folderTitle(page))
