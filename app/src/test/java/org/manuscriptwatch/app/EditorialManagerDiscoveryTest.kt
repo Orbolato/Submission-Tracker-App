@@ -1,5 +1,6 @@
 package org.manuscriptwatch.app
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -56,14 +57,29 @@ class EditorialManagerDiscoveryTest {
         assertTrue(EditorialManagerDiscovery.folders(markup, menu).isEmpty())
     }
 
-    @Test fun recognizesSeveralAuthorFolderOptionsWithoutExplicitHeading() {
+    @Test fun folderNavigationWithoutPageHeadingIsNotTheAuthorMainMenu() {
         val markup = """<html><body><nav>
           <a href='javascript:go(1)'>Submissions Being Processed</a>
           <a href='javascript:go(2)'>Revisions Being Processed</a>
           <a href='javascript:go(3)'>Submissions with a Decision</a>
         </nav></body></html>"""
-        assertTrue(EditorialManagerDiscovery.isMenuPage(markup, menu))
+        assertFalse(EditorialManagerDiscovery.isMenuPage(markup, menu))
         assertTrue(EditorialManagerDiscovery.folders(markup, menu).isEmpty())
+    }
+
+    @Test fun folderWithMenuNavigationMustRemainTrackable() {
+        val page = """<body>
+          <nav><a href='/demo/authormenu'>Author Main Menu</a>
+          <a href='/demo/processing'>Submissions Being Processed</a>
+          <a href='/demo/revisions'>Revisions Being Processed</a>
+          <a href='/demo/decisions'>Submissions with a Decision</a></nav>
+          <h2>Submissions Being Processed</h2>
+          <table><tr><th>Manuscript Number</th><th>Current Status</th></tr>
+          <tr><td>DEMO-D-26-00001</td><td>Under Review</td></tr></table>
+        </body>"""
+        assertFalse(EditorialManagerDiscovery.isMenuPage(page, menu))
+        val parsed = StatusExtractor.extract(page, "DEMO-D-26-00001", "", menu)
+        assertEquals("Under Review", (parsed as ExtractResult.Found).status)
     }
 
     @Test fun recognizesFolderTitleForPassiveCapture() {
