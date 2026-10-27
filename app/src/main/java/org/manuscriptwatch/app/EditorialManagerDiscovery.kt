@@ -55,20 +55,28 @@ object EditorialManagerDiscovery {
     fun isMenuPage(html: String, url: String): Boolean {
         if (!isEditorialManager(url)) return false
         val doc = Jsoup.parse(html, url)
+        // A journal folder often displays "Author Main Menu" in its nav bar,
+        // alongside several other folder links. That is NOT the main menu.
+        // Only a page heading with this exact text is positive evidence.
+        val hasMenuHeading = doc.select("h1,h2,h3,h4,[role=heading],div,span,strong")
+            .any { node ->
+                node.ownText().trim().replace(Regex("\\s+"), " ")
+                    .equals("Author Main Menu", ignoreCase = true)
+            }
         val namedFolders = doc.select("a,button,li,td,span,[role=button],[onclick]")
             .map { it.ownText().trim().replace(Regex("\\s+"), " ") }
             .filter { it.length in 6..120 && folderPattern.containsMatchIn(it) }
             .distinct()
-        // Editorial Manager's "Author Main Menu" text may be in a regular div,
-        // not a heading. Many installations render the folders as POST controls
-        // or JavaScript actions, which are discoverable but not safe to crawl.
-        val visibleText = doc.body()?.text().orEmpty()
-        val authorMenu = Regex(
-            "(?i)\\b(author main menu|main menu for authors|author center|author centre)\\b"
-        ).containsMatchIn(visibleText)
-        return folders(html, url).size >= 2 ||
-            (authorMenu && namedFolders.isNotEmpty()) ||
-            namedFolders.size >= 3
+
+        // A current-status table is evidence that this page contains actual
+        // submissions and should go through status extraction, not menu capture.
+        val isSubmissionList = doc.select("table,[role=grid]")
+            .any { grid ->
+                val header = grid.select("th,[role=columnheader]").text()
+                (header.contains("current status", true) || header.contains("manuscript number", true)) &&
+                    grid.select("tr,[role=row]").size >= 2
+            }
+        return hasMenuHeading && namedFolders.isNotEmpty() && !isSubmissionList
     }
 
 
