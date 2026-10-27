@@ -191,7 +191,17 @@ object SubmissionStore {
     }
 
     fun setEditorialMenu(context: Context, id: String, url: String) = synchronized(lock) {
-        all(context).find { it.id == id }?.let { save(context, it.copy(editorialMenuUrl = url)) }
+        all(context).find { it.id == id }?.let { item ->
+            // Earlier builds mistakenly saved the Author Main Menu as a
+            // manuscript tracking source. Remove only this exact menu URL.
+            val remaining = TrackingSources.effective(item).filterNot { it.url == url }
+            save(context, item.copy(
+                editorialMenuUrl = url,
+                statusUrl = if (item.statusUrl == url) remaining.firstOrNull()?.url.orEmpty()
+                    else item.statusUrl,
+                trackingSources = remaining
+            ))
+        }
     }
 
     private fun write(context: Context, entries: List<Manuscript>) {
