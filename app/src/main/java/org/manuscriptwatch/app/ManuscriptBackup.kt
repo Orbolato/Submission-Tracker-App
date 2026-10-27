@@ -173,10 +173,7 @@ object ManuscriptBackup {
      */
     fun restore(context: Context, snapshot: Snapshot): Boolean {
         val validated = decode(encode(snapshot.entriesJson, snapshot.intervalHours))
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        return prefs.edit()
-            .putString(ENTRIES, validated.entriesJson)
-            .putLong(INTERVAL, validated.intervalHours)
-            .commit()
+        return SubmissionStore.replaceFromValidatedBackup(context,
+            validated.entriesJson, validated.intervalHours)
     }
 }
