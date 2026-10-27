@@ -67,6 +67,27 @@ object TrackingSources {
         return links.distinctBy { it.url }.sortedByDescending { it.kind.priority }
     }
 
+    /**
+     * Single-page Elsevier trackers sometimes replace the address-bar URL with a
+     * query-free route after loading. Retain the *user-opened* manuscript-specific
+     * URL, but only while browsing its identical HTTPS host. Never infer an ID
+     * from another paper or save a query-free Author Hub homepage as a tracker.
+     */
+    fun preserveOpenedElsevierLink(currentUrl: String, openedUrl: String): String {
+        val originalKind = TrackingKind.fromUrl(openedUrl)
+        if (originalKind != TrackingKind.ELSEVIER_HUB &&
+            originalKind != TrackingKind.ELSEVIER_PRODUCTION) return currentUrl
+        if (!isSupportedUrl(openedUrl)) return currentUrl
+        val current = runCatching { URI(currentUrl) }.getOrNull() ?: return currentUrl
+        val opened = runCatching { URI(openedUrl) }.getOrNull() ?: return currentUrl
+        if (!current.scheme.equals("https", true) ||
+            !current.host.equals(opened.host, true) ||
+            current.userInfo != null || current.port !in setOf(-1, 443))
+            return currentUrl
+        return if (TrackingKind.fromUrl(currentUrl) == TrackingKind.JOURNAL &&
+            current.rawQuery.isNullOrBlank()) openedUrl else currentUrl
+    }
+
     fun isSupportedUrl(url: String): Boolean {
         val uri = runCatching { URI(url.trim()) }.getOrNull() ?: return false
         return uri.scheme.equals("https", true) && !uri.host.isNullOrBlank() &&
