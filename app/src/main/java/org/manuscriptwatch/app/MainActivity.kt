@@ -20,6 +20,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import java.text.DateFormat
 import java.util.Date
@@ -31,6 +32,82 @@ class MainActivity : ComponentActivity() {
     private val light = Color.rgb(245, 249, 252)
     private val gray = Color.rgb(91, 107, 122)
     private var opened = false
+
+    private val backupDocument = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        runCatching {
+            val json = ManuscriptBackup.export(this)
+            contentResolver.openOutputStream(uri, "wt")?.use { stream ->
+                stream.write(json.toByteArray(Charsets.UTF_8))
+                stream.flush()
+            } ?: error("Could not open the selected backup destination.")
+        }.onSuccess {
+            Toast.makeText(this, "Manuscript backup saved. Protect the file: tracking links are private.",
+                Toast.LENGTH_LONG).show()
+        }.onFailure {
+            AlertDialog.Builder(this).setTitle("Backup failed")
+                .setMessage(it.message ?: "Could not write the selected file.")
+                .setPositiveButton("Close", null).show()
+        }
+    }
+
+    private val restoreDocument = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+        runCatching {
+            val stream = contentResolver.openInputStream(uri)
+                ?: error("Could not read the selected backup file.")
+            val contents = stream.use { input ->
+                val output = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(8_192)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read == -1) break
+                    if (output.size() + read > ManuscriptBackup.MAX_BYTES) {
+                        throw IllegalArgumentException("Backup exceeds the 2 MB safety limit.")
+                    }
+                    output.write(buffer, 0, read)
+                }
+                output.toString(Charsets.UTF_8.name())
+            }
+            ManuscriptBackup.decode(contents)
+        }.onSuccess { snapshot ->
+            val existing = SubmissionStore.all(this).size
+            AlertDialog.Builder(this)
+                .setTitle("Replace local manuscript records?")
+                .setMessage("The selected backup contains ${snapshot.manuscriptCount} manuscript(s). " +
+                    "Restoring replaces all $existing manuscript(s) currently stored on this device, " +
+                    "including local statuses and histories. This cannot be undone unless you " +
+                    "have another backup.\n\nORCID credentials and journal login sessions " +
+                    "are not in the backup and will not be restored. " +
+                    "Make sure you trust the source of this JSON file.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Restore records") { _, _ ->
+                    runCatching {
+                        check(ManuscriptBackup.restore(this, snapshot)) {
+                            "Android could not save the restored records."
+                        }
+                        MonitorScheduler.schedule(this)
+                    }.onSuccess {
+                        draw()
+                        Toast.makeText(this, "Manuscript records restored successfully.",
+                            Toast.LENGTH_LONG).show()
+                    }.onFailure {
+                        AlertDialog.Builder(this).setTitle("Restore failed")
+                            .setMessage(it.message ?: "Local records were not restored.")
+                            .setPositiveButton("Close", null).show()
+                    }
+                }.show()
+        }.onFailure {
+            AlertDialog.Builder(this).setTitle("Invalid backup")
+                .setMessage(it.message ?: "This file could not be read as a valid backup.")
+                .setPositiveButton("Close", null).show()
+        }
+    }
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -125,6 +202,28 @@ class MainActivity : ComponentActivity() {
             "ORCID vault: configured" else "ORCID vault (optional)") { showOrcidVault() },
             LinearLayout.LayoutParams(-1, -2))
         container.addView(vaultRow)
+
+        val backupRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        backupRow.addView(pillButton("Backup records") {
+            AlertDialog.Builder(this)
+                .setTitle("Export private manuscript data?")
+                .setMessage("Create a JSON backup of manuscripts, tracking links, status and " +
+                    "peer-review histories, and the check interval. This backup includes " +
+                    "private manuscript identifiers and tracking URLs; store it securely. " +
+                    "ORCID passwords and publisher login sessions are not included.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Choose destination") { _, _ ->
+                    val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                        .format(Date())
+                    backupDocument.launch("manuscript-watch-backup-$date.json")
+                }.show()
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        backupRow.addView(pillButton("Restore records") {
+            restoreDocument.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        container.addView(backupRow)
+        Line(text("Backups contain sensitive manuscript links. Keep exported JSON files private.",
+            11f, color = gray), container, 2)
         Line(text("Tracked manuscripts", 18f, bold = true), container, 20)
         if (items.isEmpty()) {
             val empty = card()
