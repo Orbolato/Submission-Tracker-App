@@ -56,6 +56,43 @@ class StatusExtractorTest {
         assertEquals(null, result.reviewProgress?.reports)
     }
 
+    @Test fun springerHeadlineAndReviewerNewsFromRenderedSubmissionPage() {
+        val page = """<html><body>
+          <div class='currentStatus'><span>CURRENT STATUS</span>
+          <p>Last update: 26 October 2026</p>
+          <h2>Your submission is in peer review</h2></div>
+          <section><h3>News about your peer review process</h3><ul>
+            <li>The editor has invited 6 reviewer(s)</li>
+            <li>There is 1 reviewer(s) that has accepted to review your manuscript</li>
+          </ul><p>After the editor has collated and reviewed all the reports,
+          you'll be notified.</p></section></body></html>"""
+        val url = "https://submission.springernature.com/submission-details/11111111-2222-4333-8444-555555555555"
+        // A legacy user record might still contain an old CSS selector.
+        val parsed = StatusExtractor.extract(page, "EDITOR-123", ".old-selector", url)
+            as ExtractResult.Found
+        assertEquals("Your submission is in peer review", parsed.status)
+        assertEquals(6, parsed.reviewProgress?.invited)
+        assertEquals(1, parsed.reviewProgress?.accepted)
+        assertEquals(null, parsed.reviewProgress?.reports)
+    }
+
+    @Test fun readsEditorialManagerCardWithManuscriptSpecificStatus() {
+        val page = """<html><body><div role='grid'>
+          <div role='row'><span>DEMO-D-26-00001</span>
+          <span class='current-status'>With Editor</span></div>
+          <div role='row'><span>DEMO-D-26-00002</span>
+          <span class='current-status'>Under Review</span></div>
+        </div></body></html>"""
+        assertEquals("With Editor",
+            (StatusExtractor.extract(page, "DEMO-D-26-00001", "",
+                "https://www.editorialmanager.com/demo/processing")
+                as ExtractResult.Found).status)
+        assertEquals("Under Review",
+            (StatusExtractor.extract(page, "DEMO-D-26-00002", "",
+                "https://www.editorialmanager.com/demo/processing")
+                as ExtractResult.Found).status)
+    }
+
     @Test fun cannotGuessFromUnlabelledSpringerProse() {
         val page = "<html><body>Under Review is a common status. Sign in for help.</body></html>"
         assertTrue(StatusExtractor.extract(page, "EDITOR-123", "",
