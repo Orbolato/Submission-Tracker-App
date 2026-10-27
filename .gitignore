@@ -16,3 +16,6 @@ local.properties
 keystore.properties
 *.apk
 *.aab
+
+# Never commit portable manuscript backups (may contain private tracking tokens)
+manuscript-watch-backup-*.json
