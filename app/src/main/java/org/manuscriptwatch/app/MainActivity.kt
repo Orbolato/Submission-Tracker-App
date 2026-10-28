@@ -217,7 +217,7 @@ class MainActivity : ComponentActivity() {
         val overview = card()
         val active = items.count { !it.currentStatus.contains("accept", true) && !it.currentStatus.contains("reject", true) }
         Line(text("${items.size} manuscripts  •  $active not marked final", 16f, bold = true), overview)
-        Line(text("Background check: every ${SubmissionStore.intervalHours(this)} hours, when Android allows", 12f, color = gray), overview, 6)
+        Line(text("Background check: every ${SubmissionStore.intervalLabel(SubmissionStore.intervalMinutes(this))} (best effort; Android may delay)", 12f, color = gray), overview, 6)
         Line(text("To connect a manuscript, open its journal, sign in, and select the page showing its status. No HTML settings needed.", 12f, color = gray), overview, 4)
         container.addView(overview, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
 
@@ -371,13 +371,57 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun chooseInterval() {
-        val values = longArrayOf(1, 3, 6, 12, 24)
+        val presets = longArrayOf(15, 30, 60, 180, 360, 720, 1440)
+        val choices = presets.map { SubmissionStore.intervalLabel(it) } + "Custom interval (minutes)…"
+        val current = SubmissionStore.intervalMinutes(this)
         AlertDialog.Builder(this).setTitle("Background check interval")
-            .setSingleChoiceItems(values.map { "$it hour${if (it > 1) "s" else ""}" }.toTypedArray(),
-                values.indexOf(SubmissionStore.intervalHours(this))) { dialog, which ->
-                SubmissionStore.setIntervalHours(this, values[which]); MonitorScheduler.schedule(this)
-                dialog.dismiss(); draw()
-            }.setNegativeButton("Cancel", null).show()
+            .setSingleChoiceItems(choices.toTypedArray(), presets.indexOf(current)) { dialog, which ->
+                dialog.dismiss()
+                if (which == presets.size) {
+                    chooseCustomInterval(current)
+                } else {
+                    SubmissionStore.setIntervalMinutes(this, presets[which])
+                    MonitorScheduler.schedule(this)
+                    draw()
+                }
+            }
+            .setNegativeButton("Cancel", null).show()
+    }
+
+    private fun chooseCustomInterval(current: Long) {
+        val field = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setSingleLine(true)
+            setText(current.toString())
+            selectAll()
+            hint = "Minutes (15–10080)"
+        }
+        val wrapper = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+            addView(text("Choose 15 to 10080 minutes (7 days). " +
+                "Android may delay periodic checks, particularly with battery optimization.", 12f, color = gray))
+            addView(field)
+        }
+        val dialog = AlertDialog.Builder(this).setTitle("Custom check interval")
+            .setView(wrapper)
+            .setPositiveButton("Save", null)
+            .setNegativeButton("Cancel", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val minutes = field.text.toString().trim().toLongOrNull()
+                if (minutes == null ||
+                    minutes !in SubmissionStore.MIN_INTERVAL_MINUTES..SubmissionStore.MAX_INTERVAL_MINUTES) {
+                    field.error = "Enter a whole number between 15 and 10080."
+                    return@setOnClickListener
+                }
+                SubmissionStore.setIntervalMinutes(this, minutes)
+                MonitorScheduler.schedule(this)
+                dialog.dismiss()
+                draw()
+            }
+        }
+        dialog.show()
     }
 
     private fun openSite(item: Manuscript) {
