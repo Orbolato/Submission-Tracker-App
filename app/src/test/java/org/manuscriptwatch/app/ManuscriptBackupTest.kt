@@ -84,7 +84,7 @@ class ManuscriptBackupTest {
         assertThrows(IllegalArgumentException::class.java) {
             ManuscriptBackup.decode("""{"manuscripts":[]}""")
         }
-        val mutated = JSONObject(ManuscriptBackup.encode("[]", 3))
+        val mutated = JSONObject(ManuscriptBackup.encode("[]", 180))
             .put("schemaVersion", 99).toString()
         assertThrows(IllegalArgumentException::class.java) {
             ManuscriptBackup.decode(mutated)
