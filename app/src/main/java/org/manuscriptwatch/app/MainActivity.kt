@@ -48,7 +48,7 @@ class MainActivity : ComponentActivity() {
     ) {
         val workId = MonitorScheduler.checkNow(this, manuscriptId, sourceUrl)
         val liveData = WorkManager.getInstance(this).getWorkInfoByIdLiveData(workId)
-        val observer = object : Observer<WorkInfo> {
+        val observer = object : Observer<WorkInfo?> {
             override fun onChanged(info: WorkInfo?) {
                 if (info == null || !info.state.isFinished) return
                 liveData.removeObserver(this)
