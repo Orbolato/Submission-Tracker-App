@@ -227,7 +227,6 @@ class MainActivity : ComponentActivity() {
             checkAndRefresh()
             Toast.makeText(this, "Checking manuscripts. Results update automatically.", Toast.LENGTH_LONG).show()
         }, LinearLayout.LayoutParams(0, -2, 1f))
-        actions.addView(pillButton("Refresh") { draw() }, LinearLayout.LayoutParams(0, -2, 0.75f))
         container.addView(actions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
 
         val options = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -474,9 +473,7 @@ class MainActivity : ComponentActivity() {
                 "Your private links stay on this device.", 12f, color = gray))
             addView(entry)
         }
-        val refresh = pillButton("Refresh tracking results") { /* wired after the list is defined */ }
         val savedLinks = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        content.addView(refresh)
         content.addView(text("Saved tracking sources:", 12f, bold = true),
             LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
         content.addView(savedLinks)
@@ -522,7 +519,6 @@ class MainActivity : ComponentActivity() {
                 })
             }
         }
-        refresh.setOnClickListener { repaint(); draw() }
         val scroll = ScrollView(this).apply { addView(content) }
         val dialog = AlertDialog.Builder(this)
             .setTitle("Tracking links for ${item.manuscriptId}")
