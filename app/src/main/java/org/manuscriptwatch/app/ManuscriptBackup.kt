@@ -12,27 +12,29 @@ import org.json.JSONObject
 object ManuscriptBackup {
     const val MAX_BYTES = 2_000_000
     private const val FORMAT = "org.manuscriptwatch.backup"
-    private const val VERSION = 1
+    private const val VERSION = 2
     private const val PREFS = "manuscript_watch_data"
     private const val ENTRIES = "entries"
-    private const val INTERVAL = "interval_hours"
-    private val INTERVALS = setOf(1L, 3L, 6L, 12L, 24L)
+    private const val LEGACY_INTERVAL = "interval_hours"
+    private const val INTERVAL_MINUTES = "interval_minutes"
 
     data class Snapshot(
         val entriesJson: String,
         val manuscriptCount: Int,
-        val intervalHours: Long
+        val intervalMinutes: Long
     )
 
-    fun encode(entriesJson: String, intervalHours: Long): String {
+    fun encode(entriesJson: String, intervalMinutes: Long): String {
         val entries = JSONArray(entriesJson)
         validateEntries(entries)
-        require(intervalHours in INTERVALS) { "Unsupported monitoring interval." }
+        require(intervalMinutes in SubmissionStore.MIN_INTERVAL_MINUTES..SubmissionStore.MAX_INTERVAL_MINUTES) {
+            "Monitoring interval must be between 15 and 10080 minutes."
+        }
         val result = JSONObject()
             .put("format", FORMAT)
             .put("schemaVersion", VERSION)
             .put("exportedAt", System.currentTimeMillis())
-            .put("intervalHours", intervalHours)
+            .put("intervalMinutes", intervalMinutes)
             .put("manuscripts", entries)
             .toString(2)
         require(result.toByteArray(Charsets.UTF_8).size <= MAX_BYTES) {
@@ -49,12 +51,21 @@ object ManuscriptBackup {
         require(root.optString("format") == FORMAT) {
             "This is not a Manuscript Watch backup."
         }
-        require(root.optInt("schemaVersion", -1) == VERSION) {
-            "Unsupported backup format version."
+        val version = root.optInt("schemaVersion", -1)
+        require(version in 1..VERSION) { "Unsupported backup format version." }
+        val interval = if (version == 1) {
+            // Preserve v0.2.0 exports, which saved the interval as hours.
+            require(root.has("intervalHours")) { "Monitoring interval is missing." }
+            val hours = root.getLong("intervalHours")
+            require(hours in 1L..168L) { "Invalid legacy monitoring interval." }
+            hours * 60L
+        } else {
+            require(root.has("intervalMinutes")) { "Monitoring interval is missing." }
+            root.getLong("intervalMinutes")
         }
-        require(root.has("intervalHours")) { "Monitoring interval is missing." }
-        val interval = root.getLong("intervalHours")
-        require(interval in INTERVALS) { "Invalid monitoring interval." }
+        require(interval in SubmissionStore.MIN_INTERVAL_MINUTES..SubmissionStore.MAX_INTERVAL_MINUTES) {
+            "Invalid monitoring interval."
+        }
         val entries = root.getJSONArray("manuscripts")
         validateEntries(entries)
         return Snapshot(entries.toString(), entries.length(), interval)
@@ -165,15 +176,15 @@ object ManuscriptBackup {
     fun export(context: Context): String {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return encode(prefs.getString(ENTRIES, "[]") ?: "[]",
-            prefs.getLong(INTERVAL, 3L))
+            SubmissionStore.intervalMinutes(context))
     }
 
     /** Validates the entire file before touching local data. Replaces both
      * keys in one SharedPreferences commit; returns false if commit fails.
      */
     fun restore(context: Context, snapshot: Snapshot): Boolean {
-        val validated = decode(encode(snapshot.entriesJson, snapshot.intervalHours))
+        val validated = decode(encode(snapshot.entriesJson, snapshot.intervalMinutes))
         return SubmissionStore.replaceFromValidatedBackup(context,
-            validated.entriesJson, validated.intervalHours)
+            validated.entriesJson, validated.intervalMinutes)
     }
 }
