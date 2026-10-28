@@ -22,6 +22,9 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Observer
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import java.text.DateFormat
 import java.util.Date
 
@@ -32,6 +35,37 @@ class MainActivity : ComponentActivity() {
     private val light = Color.rgb(245, 249, 252)
     private val gray = Color.rgb(91, 107, 122)
     private var opened = false
+    private var dashboardScroll: ScrollView? = null
+
+    /**
+     * A check is asynchronous: observe precisely the work we started rather
+     * than redrawing immediately or guessing how long publisher pages take.
+     */
+    private fun checkAndRefresh(
+        manuscriptId: String? = null,
+        sourceUrl: String? = null,
+        onComplete: (() -> Unit)? = null
+    ) {
+        val workId = MonitorScheduler.checkNow(this, manuscriptId, sourceUrl)
+        val liveData = WorkManager.getInstance(this).getWorkInfoByIdLiveData(workId)
+        val observer = object : Observer<WorkInfo> {
+            override fun onChanged(info: WorkInfo?) {
+                if (info == null || !info.state.isFinished) return
+                liveData.removeObserver(this)
+                if (isFinishing || isDestroyed) return
+                // A completed worker may have saved a status, reviewer count,
+                // source-specific error, or simply a failed login.
+                draw()
+                onComplete?.invoke()
+                if (info.state != WorkInfo.State.SUCCEEDED) {
+                    Toast.makeText(this@MainActivity,
+                        "Website check did not complete. Try again when connected.",
+                        Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        liveData.observe(this, observer)
+    }
 
     private val backupDocument = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -164,6 +198,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun draw() {
+        val previousScrollY = dashboardScroll?.scrollY ?: 0
         val items = SubmissionStore.all(this).sortedWith(compareBy<Manuscript> { it.journal }.thenBy { it.title })
         val scroll = ScrollView(this)
         scroll.setBackgroundColor(light)
@@ -173,6 +208,8 @@ class MainActivity : ComponentActivity() {
         }
         scroll.addView(container)
         setContentView(scroll)
+        dashboardScroll = scroll
+        scroll.post { scroll.scrollTo(0, previousScrollY) }
         keepContentInsideSystemBars(scroll)
 
         Line(text("Manuscript Watch", 28f, bold = true, color = navy), container)
@@ -187,8 +224,8 @@ class MainActivity : ComponentActivity() {
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         actions.addView(pillButton("+ Add paper") { editManuscript(null) }, LinearLayout.LayoutParams(0, -2, 1f))
         actions.addView(pillButton("Check now") {
-            MonitorScheduler.checkNow(this)
-            Toast.makeText(this, "Website checks queued. Tap Refresh afterward.", Toast.LENGTH_LONG).show()
+            checkAndRefresh()
+            Toast.makeText(this, "Checking manuscripts. Results update automatically.", Toast.LENGTH_LONG).show()
         }, LinearLayout.LayoutParams(0, -2, 1f))
         actions.addView(pillButton("Refresh") { draw() }, LinearLayout.LayoutParams(0, -2, 0.75f))
         container.addView(actions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
@@ -256,8 +293,8 @@ class MainActivity : ComponentActivity() {
             val topButtons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             topButtons.addView(pillButton("Open journal") { openSite(item) }, LinearLayout.LayoutParams(0, -2, 1f))
             topButtons.addView(pillButton("Check") {
-                MonitorScheduler.checkNow(this, item.id)
-                Toast.makeText(this, "Check queued", Toast.LENGTH_SHORT).show()
+                checkAndRefresh(item.id)
+                Toast.makeText(this, "Checking manuscript. Results update automatically.", Toast.LENGTH_SHORT).show()
             }, LinearLayout.LayoutParams(0, -2, 1f))
             topButtons.addView(pillButton("History") { history(item) }, LinearLayout.LayoutParams(0, -2, 1f))
             c.addView(topButtons, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(9) })
@@ -418,8 +455,10 @@ class MainActivity : ComponentActivity() {
                 if (source.lastError.isNotBlank())
                     savedLinks.addView(text("Attention: ${source.lastError}", 11f, color = Color.rgb(160, 77, 34)))
                 savedLinks.addView(pillButton("Check ${source.kind.title}") {
-                    MonitorScheduler.checkNow(this, item.id, source.url)
-                    Toast.makeText(this, "Check queued. Tap Refresh tracking results after it finishes.", Toast.LENGTH_LONG).show()
+                    checkAndRefresh(item.id, source.url) {
+                        if (shownDialog?.isShowing == true) repaint()
+                    }
+                    Toast.makeText(this, "Checking source. Results update automatically.", Toast.LENGTH_SHORT).show()
                 })
                 savedLinks.addView(pillButton("Open tracking page") {
                     startActivity(Intent(this, BrowserActivity::class.java).apply {
