@@ -90,7 +90,8 @@ object MonitorScheduler {
             WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request
         )
     }
-    fun checkNow(context: Context, id: String? = null, sourceUrl: String? = null) {
+    /** Return the queued WorkManager ID so the UI can refresh on completion. */
+    fun checkNow(context: Context, id: String? = null, sourceUrl: String? = null): java.util.UUID {
         val constraint = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
         val request = OneTimeWorkRequestBuilder<MonitorWorker>()
             .setConstraints(constraint)
@@ -99,5 +100,6 @@ object MonitorScheduler {
                     "onlyId" to id, "onlySourceUrl" to sourceUrl))
             }.build()
         WorkManager.getInstance(context).enqueue(request)
+        return request.id
     }
 }
