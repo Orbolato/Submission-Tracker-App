@@ -39,10 +39,10 @@ class ManuscriptBackupTest {
 
     @Test fun roundTripPreservesManuscriptsSourcesProgressAndHistory() {
         val entries = JSONArray().put(manuscript())
-        val backup = ManuscriptBackup.encode(entries.toString(), 6)
+        val backup = ManuscriptBackup.encode(entries.toString(), 360)
         val restored = ManuscriptBackup.decode(backup)
         assertEquals(1, restored.manuscriptCount)
-        assertEquals(6, restored.intervalHours)
+        assertEquals(360, restored.intervalMinutes)
         val saved = JSONArray(restored.entriesJson).getJSONObject(0)
         assertEquals(source, saved.getJSONArray("trackingSources").getJSONObject(0).getString("url"))
         assertEquals(1, saved.getJSONArray("history").length())
@@ -53,8 +53,31 @@ class ManuscriptBackupTest {
     }
 
     @Test fun emptyBackupIsValid() {
-        val restored = ManuscriptBackup.decode(ManuscriptBackup.encode("[]", 3))
+        val restored = ManuscriptBackup.decode(ManuscriptBackup.encode("[]", 180))
         assertEquals(0, restored.manuscriptCount)
+    }
+
+    @Test fun supportsFifteenThirtyAndCustomMinuteIntervals() {
+        for (minutes in listOf(15L, 30L, 45L, 90L, 600L, 10080L)) {
+            val backup = ManuscriptBackup.encode("[]", minutes)
+            assertEquals(minutes, ManuscriptBackup.decode(backup).intervalMinutes)
+            assertEquals(2, JSONObject(backup).getInt("schemaVersion"))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            ManuscriptBackup.encode("[]", 10081L)
+        }
+    }
+
+    @Test fun readsV020LegacyHourlyBackup() {
+        val old = JSONObject()
+            .put("format", "org.manuscriptwatch.backup")
+            .put("schemaVersion", 1)
+            .put("intervalHours", 3)
+            .put("manuscripts", JSONArray())
+            .toString()
+        val result = ManuscriptBackup.decode(old)
+        assertEquals(180L, result.intervalMinutes)
+        assertEquals(0, result.manuscriptCount)
     }
 
     @Test fun rejectsWrongFileOrFormatVersion() {
@@ -70,11 +93,11 @@ class ManuscriptBackupTest {
 
     @Test fun rejectsMissingRequiredFieldsAndDuplicateRecords() {
         assertThrows(IllegalArgumentException::class.java) {
-            ManuscriptBackup.encode(JSONArray().put(JSONObject().put("id", "demo")).toString(), 3)
+            ManuscriptBackup.encode(JSONArray().put(JSONObject().put("id", "demo")).toString(), 180)
         }
         val duplicates = JSONArray().put(manuscript()).put(manuscript())
         assertThrows(IllegalArgumentException::class.java) {
-            ManuscriptBackup.encode(duplicates.toString(), 3)
+            ManuscriptBackup.encode(duplicates.toString(), 180)
         }
     }
 
@@ -83,18 +106,18 @@ class ManuscriptBackupTest {
         record.getJSONArray("trackingSources").getJSONObject(0)
             .put("url", "javascript:alert(1)")
         assertThrows(IllegalArgumentException::class.java) {
-            ManuscriptBackup.encode(JSONArray().put(record).toString(), 3)
+            ManuscriptBackup.encode(JSONArray().put(record).toString(), 180)
         }
         val another = manuscript()
         another.getJSONObject("reviewProgress").put("accepted", -2)
         assertThrows(IllegalArgumentException::class.java) {
-            ManuscriptBackup.encode(JSONArray().put(another).toString(), 3)
+            ManuscriptBackup.encode(JSONArray().put(another).toString(), 180)
         }
     }
 
     @Test fun rejectsOversizedBackupAndBadCheckIntervals() {
         assertThrows(IllegalArgumentException::class.java) {
-            ManuscriptBackup.encode("[]", 5)
+            ManuscriptBackup.encode("[]", 14)
         }
         assertThrows(IllegalArgumentException::class.java) {
             ManuscriptBackup.decode(" ".repeat(ManuscriptBackup.MAX_BYTES + 1))
