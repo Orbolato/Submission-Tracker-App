@@ -12,6 +12,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.annotation.MainThread
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -65,6 +66,8 @@ object SpringerWebMonitor {
                     "Open the submission in Manuscript Watch and check your session.",
                     retryable = true
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 ExtractResult.NeedsAttention("Springer browser check failed (${e.javaClass.simpleName}).",
                     retryable = true)
@@ -153,6 +156,10 @@ object SpringerWebMonitor {
                         val issue = parsed as ExtractResult.NeedsAttention
                         lastReason = issue.reason
                         lastProgress = issue.reviewProgress ?: lastProgress
+                        if (MonitorRetryPolicy.requiresUserAction(issue.reason)) {
+                            finish(issue)
+                            return@evaluateJavascript
+                        }
                     }
                 } else {
                     lastReason = "Springer page is not ready or its DOM is too large to inspect safely."
