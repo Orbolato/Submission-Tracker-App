@@ -13,4 +13,11 @@ object MonitorRetryPolicy {
 
     fun isTransientHttpStatus(code: Int): Boolean =
         code == 408 || code == 425 || code == 429 || code in 500..599
+
+    fun requiresUserAction(reason: String): Boolean {
+        val normalized = reason.lowercase()
+        return listOf("captcha", "human verification", "manual verification",
+            "login may be required", "sign in again", "log in", "access denied")
+            .any { normalized.contains(it) }
+    }
 }
