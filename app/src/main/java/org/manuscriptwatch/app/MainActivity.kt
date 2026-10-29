@@ -39,10 +39,11 @@ class MainActivity : ComponentActivity() {
     private val gray = Color.rgb(91, 107, 122)
     private var opened = false
     private var dashboardScroll: ScrollView? = null
+    private var dashboardVisible = false
     private val refreshHandler = Handler(Looper.getMainLooper())
     private var trackingDialogRefresh: (() -> Unit)? = null
     private val refreshUi = Runnable {
-        if (opened && !isFinishing && !isDestroyed) {
+        if (dashboardVisible && opened && !isFinishing && !isDestroyed) {
             draw()
             trackingDialogRefresh?.invoke()
         }
@@ -176,6 +177,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        dashboardVisible = true
         getSharedPreferences("manuscript_watch_data", MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(manuscriptChanges)
     }
@@ -186,6 +188,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        dashboardVisible = false
         getSharedPreferences("manuscript_watch_data", MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(manuscriptChanges)
         refreshHandler.removeCallbacks(refreshUi)
