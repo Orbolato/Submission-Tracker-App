@@ -28,7 +28,7 @@ object ElsevierWebMonitor {
             return@withContext ExtractResult.NeedsAttention("Enter a valid Elsevier tracking URL.")
         }
         val browser = try { WebView(context.applicationContext) }
-        catch (_: Exception) { return@withContext ExtractResult.NeedsAttention("Unable to open Android WebView.") }
+        catch (_: Exception) { return@withContext ExtractResult.NeedsAttention("Unable to open Android WebView.", retryable = true) }
         try {
             browser.settings.javaScriptEnabled = true
             browser.settings.domStorageEnabled = true
@@ -36,9 +36,11 @@ object ElsevierWebMonitor {
             browser.settings.setSupportMultipleWindows(false)
             CookieManager.getInstance().setAcceptCookie(true)
             withTimeoutOrNull(30_000L) { renderAndRead(browser, source) }
-                ?: ExtractResult.NeedsAttention("Elsevier tracking page did not expose a readable status within 30 seconds.")
+                ?: ExtractResult.NeedsAttention("Elsevier tracking page did not expose a readable status within 30 seconds.",
+                    retryable = true)
         } catch (e: Exception) {
-            ExtractResult.NeedsAttention("Elsevier page check failed (${e.javaClass.simpleName}).")
+            ExtractResult.NeedsAttention("Elsevier page check failed (${e.javaClass.simpleName}).",
+                retryable = true)
         } finally {
             browser.stopLoading()
             browser.webViewClient = WebViewClient()
@@ -109,7 +111,8 @@ object ElsevierWebMonitor {
                         lastProgress = issue.reviewProgress ?: lastProgress
                     }
                     polls++
-                    if (polls >= 17) finish(ExtractResult.NeedsAttention(lastError, lastProgress))
+                    if (polls >= 17) finish(ExtractResult.NeedsAttention(lastError, lastProgress,
+                        retryable = true))
                     else handler.postDelayed({ poll() }, 1_500L)
                 }
             }
@@ -125,13 +128,16 @@ object ElsevierWebMonitor {
                     super.onPageFinished(view, url)
                 }
                 override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, errorResponse: WebResourceResponse?) {
-                    if (request?.isForMainFrame == true && (errorResponse?.statusCode ?: 0) >= 400)
-                        finish(ExtractResult.NeedsAttention("Elsevier tracking page returned an HTTP error."))
+                    val code = errorResponse?.statusCode ?: 0
+                    if (request?.isForMainFrame == true && code >= 400)
+                        finish(ExtractResult.NeedsAttention("Elsevier tracking page returned HTTP $code.",
+                            retryable = MonitorRetryPolicy.isTransientHttpStatus(code)))
                     super.onReceivedHttpError(view, request, errorResponse)
                 }
                 override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                     if (request?.isForMainFrame == true)
-                        finish(ExtractResult.NeedsAttention("Could not load the Elsevier tracking page."))
+                        finish(ExtractResult.NeedsAttention("Could not load the Elsevier tracking page.",
+                            retryable = true))
                     super.onReceivedError(view, request, error)
                 }
             }
