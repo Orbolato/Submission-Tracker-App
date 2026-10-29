@@ -32,10 +32,19 @@ class MonitorWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             var sourceFailed = false
             val errors = mutableListOf<String>()
             var discovered: EditorialManagerDiscovery.Found? = null
+            var discoveryRetryable = false
             val isEditorial = listOf(item.editorialMenuUrl, item.journalUrl, item.statusUrl)
                 .any { EditorialManagerDiscovery.isEditorialManager(it) }
             if (isEditorial && chosenSourceUrl == null) {
-                when (val discovery = EditorialManagerDiscovery.locate(item)) {
+                val discoveryResult = try {
+                    EditorialManagerDiscovery.locate(item)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    EditorialManagerDiscovery.Result.NeedsAttention(
+                        "Editorial Manager check failed (${e.javaClass.simpleName}).", retryable = true)
+                }
+                when (val discovery = discoveryResult) {
                     is EditorialManagerDiscovery.Result.Located -> {
                         discovered = discovery.value
                         val endpoint = TrackingSource(TrackingKind.EDITORIAL_MANAGER,
@@ -45,7 +54,10 @@ class MonitorWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                             .forEach { AppNotifications.notifyChange(applicationContext, it) }
                         found = true
                     }
-                    is EditorialManagerDiscovery.Result.NeedsAttention -> errors += discovery.reason
+                    is EditorialManagerDiscovery.Result.NeedsAttention -> {
+                        errors += discovery.reason
+                        discoveryRetryable = discovery.retryable
+                    }
                 }
             }
             val sources = TrackingSources.effective(item)
@@ -85,6 +97,7 @@ class MonitorWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 }
             }
             if (!found) {
+                if (discoveryRetryable) transientFailure = true
                 SubmissionStore.updateError(applicationContext, item.id,
                     errors.firstOrNull() ?: "No tracking source is configured. Open the journal or add a tracking link.")
                 anyUnverified = true
