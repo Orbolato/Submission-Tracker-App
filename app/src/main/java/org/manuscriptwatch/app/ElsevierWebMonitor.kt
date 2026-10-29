@@ -10,6 +10,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -38,6 +39,8 @@ object ElsevierWebMonitor {
             withTimeoutOrNull(30_000L) { renderAndRead(browser, source) }
                 ?: ExtractResult.NeedsAttention("Elsevier tracking page did not expose a readable status within 30 seconds.",
                     retryable = true)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             ExtractResult.NeedsAttention("Elsevier page check failed (${e.javaClass.simpleName}).",
                 retryable = true)
@@ -109,6 +112,10 @@ object ElsevierWebMonitor {
                         val issue = parsed as ExtractResult.NeedsAttention
                         lastError = issue.reason
                         lastProgress = issue.reviewProgress ?: lastProgress
+                        if (MonitorRetryPolicy.requiresUserAction(issue.reason)) {
+                            finish(issue)
+                            return@evaluateJavascript
+                        }
                     }
                     polls++
                     if (polls >= 17) finish(ExtractResult.NeedsAttention(lastError, lastProgress,
