@@ -5,7 +5,12 @@ import org.jsoup.nodes.Element
 
 sealed class ExtractResult {
     data class Found(val status: String, val reviewProgress: ReviewProgress? = null) : ExtractResult()
-    data class NeedsAttention(val reason: String, val reviewProgress: ReviewProgress? = null) : ExtractResult()
+    data class NeedsAttention(
+        val reason: String,
+        val reviewProgress: ReviewProgress? = null,
+        // Only temporary failures should trigger a background retry.
+        val retryable: Boolean = false
+    ) : ExtractResult()
 }
 
 /**

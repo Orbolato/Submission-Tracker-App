@@ -15,7 +15,7 @@ object EditorialManagerDiscovery {
     data class Found(val url: String, val folder: String, val status: ExtractResult.Found)
     sealed class Result {
         data class Located(val value: Found) : Result()
-        data class NeedsAttention(val reason: String) : Result()
+        data class NeedsAttention(val reason: String, val retryable: Boolean = false) : Result()
     }
 
     private val folderPattern = Regex(
@@ -125,26 +125,30 @@ object EditorialManagerDiscovery {
         if (startUrls.isEmpty()) return Result.NeedsAttention("No Editorial Manager journal page is configured.")
 
         var menu: Pair<String, List<FolderLink>>? = null
-        var lastError = "Journal author menu was not found. Open the journal, sign in, and save the Author Main Menu."
+        var readAnyMenu = false
+        val lastError = "Journal author menu was not found. Open the journal, sign in, and save the Author Main Menu."
         for (candidate in startUrls.take(3)) {
             val html = fetch(candidate) ?: continue
+            readAnyMenu = true
             val links = folders(html, candidate)
             if (links.isNotEmpty()) { menu = candidate to links; break }
             val direct = StatusExtractor.extract(html, manuscript.manuscriptId, manuscript.cssSelector, candidate)
             if (direct is ExtractResult.Found) return Result.Located(Found(candidate, "Previously tracked folder", direct))
         }
-        val links = menu?.second ?: return Result.NeedsAttention(lastError)
+        val links = menu?.second ?: return Result.NeedsAttention(lastError, retryable = !readAnyMenu)
         return scanFolders(manuscript, links)
     }
 
     private fun scanFolders(manuscript: Manuscript, links: List<FolderLink>): Result {
         val ordered = links.sortedByDescending { if (it.title.equals(manuscript.currentFolder, true)) 1 else 0 }
+        var readAnyFolder = false
         for (folder in ordered) {
             var page = folder.url
             val seen = mutableSetOf<String>()
             for (index in 0 until 3) {
                 if (!seen.add(page)) break
                 val html = fetch(page) ?: break
+                readAnyFolder = true
                 val parsed = StatusExtractor.extract(html, manuscript.manuscriptId, "", page)
                 if (parsed is ExtractResult.Found) return Result.Located(Found(page, folder.title, parsed))
                 val next = nextPage(html, page) ?: break
@@ -153,7 +157,8 @@ object EditorialManagerDiscovery {
         }
         return Result.NeedsAttention(
             "The manuscript was not found in ${links.size} accessible Editorial Manager folders. " +
-                "This can happen with JavaScript/POST navigation, additional pages, or an expired session."
+                "This can happen with JavaScript/POST navigation, additional pages, or an expired session.",
+            retryable = !readAnyFolder
         )
     }
 

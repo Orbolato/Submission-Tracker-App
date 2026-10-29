@@ -12,6 +12,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.annotation.MainThread
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -46,7 +47,8 @@ object SpringerWebMonitor {
                 WebView(context.applicationContext)
             } catch (e: Exception) {
                 return@withContext ExtractResult.NeedsAttention(
-                    "Android could not start the background browser (${e.javaClass.simpleName})."
+                    "Android could not start the background browser (${e.javaClass.simpleName}).",
+                    retryable = true
                 )
             }
             try {
@@ -61,10 +63,14 @@ object SpringerWebMonitor {
                 }
                 result ?: ExtractResult.NeedsAttention(
                     "Springer did not expose a readable current status within 30 seconds. " +
-                    "Open the submission in Manuscript Watch and check your session."
+                    "Open the submission in Manuscript Watch and check your session.",
+                    retryable = true
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                ExtractResult.NeedsAttention("Springer browser check failed (${e.javaClass.simpleName}).")
+                ExtractResult.NeedsAttention("Springer browser check failed (${e.javaClass.simpleName}).",
+                    retryable = true)
             } finally {
                 // A WebView MUST be released on its creation (main) thread.
                 browser.stopLoading()
@@ -150,6 +156,10 @@ object SpringerWebMonitor {
                         val issue = parsed as ExtractResult.NeedsAttention
                         lastReason = issue.reason
                         lastProgress = issue.reviewProgress ?: lastProgress
+                        if (MonitorRetryPolicy.requiresUserAction(issue.reason)) {
+                            finish(issue)
+                            return@evaluateJavascript
+                        }
                     }
                 } else {
                     lastReason = "Springer page is not ready or its DOM is too large to inspect safely."
@@ -157,7 +167,8 @@ object SpringerWebMonitor {
                 polls++
                 if (polls >= 16) {
                     finish(bestFound ?: ExtractResult.NeedsAttention(
-                        "Springer page loaded, but a current status was not identified. $lastReason", lastProgress
+                        "Springer page loaded, but a current status was not identified. $lastReason", lastProgress,
+                        retryable = true
                     ))
                 } else {
                     handler.postDelayed({ poll() }, POLL_MS)
@@ -189,14 +200,16 @@ object SpringerWebMonitor {
             ) {
                 val code = errorResponse?.statusCode ?: 0
                 if (request?.isForMainFrame == true && code in 400..599) {
-                    finish(ExtractResult.NeedsAttention("Springer returned HTTP $code. Check login in the app."))
+                    finish(ExtractResult.NeedsAttention("Springer returned HTTP $code. Check login in the app.",
+                        retryable = MonitorRetryPolicy.isTransientHttpStatus(code)))
                 }
                 super.onReceivedHttpError(view, request, errorResponse)
             }
 
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                 if (request?.isForMainFrame == true) {
-                    finish(ExtractResult.NeedsAttention("Springer page could not be loaded. Check connection and login."))
+                    finish(ExtractResult.NeedsAttention("Springer page could not be loaded. Check connection and login.",
+                        retryable = true))
                 }
                 super.onReceivedError(view, request, error)
             }

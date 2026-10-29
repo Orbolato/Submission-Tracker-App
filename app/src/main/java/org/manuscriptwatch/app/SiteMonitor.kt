@@ -39,7 +39,8 @@ object SiteMonitor {
                 } else if (code == 401 || code == 403) {
                     return ExtractResult.NeedsAttention("Access denied or session expired. Please sign in again.")
                 } else if (code != 200) {
-                    return ExtractResult.NeedsAttention("Journal site returned HTTP $code.")
+                    return ExtractResult.NeedsAttention("Journal site returned HTTP $code.",
+                        retryable = MonitorRetryPolicy.isTransientHttpStatus(code))
                 } else {
                     val type = connection.contentType ?: ""
                     if (!type.contains("html", ignoreCase = true)) {
