@@ -20,6 +20,16 @@ class MonitorRetryPolicyTest {
         assertFalse(ExtractResult.NeedsAttention("Session expired").retryable)
     }
 
+    @Test fun loginAndCaptchaCasesRequireManualIntervention() {
+        for (reason in listOf("Login may be required", "Site requests human verification.",
+            "Tracking website requires manual verification.", "CAPTCHA detected",
+            "Access denied", "Please sign in again")) {
+            assertTrue(MonitorRetryPolicy.requiresUserAction(reason))
+        }
+        assertFalse(MonitorRetryPolicy.requiresUserAction("Website request timed out"))
+        assertFalse(MonitorRetryPolicy.requiresUserAction("Tracking page has not rendered"))
+    }
+
     @Test fun retryableHttpResponsesExcludeAuthenticationAndOrdinaryClientErrors() {
         for (code in listOf(408, 425, 429, 500, 502, 503, 504)) {
             assertTrue(MonitorRetryPolicy.isTransientHttpStatus(code))
