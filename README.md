@@ -19,6 +19,8 @@ The current implementation focuses on **Springer Nature** and **Elsevier / Edito
 - Schedule best-effort checks with Android WorkManager using presets of 15 or 30 minutes, 1, 3, 6, 12, or 24 hours, or a custom interval of 15–10,080 minutes (default: 3 hours). Android may delay periodic checks.
 - Optionally store ORCID credentials encrypted with Android Keystore for **user-triggered** autofill on verified ORCID login pages.
 - Manual **Check** actions refresh the dashboard and tracking-source details automatically when the background check completes.
+- Temporary network, HTTP 429/5xx, WebView-loading, and timeout failures are retried with exponential backoff (up to three additional attempts per check cycle). A failed periodic cycle will not disable future scheduled checks. Login challenges and unsupported page formats still require user attention.
+- Each tracking source shows its **Last attempt** and **Last verified status** timestamps separately, so a failed fetch is never displayed as a successful fresh observation. The open dashboard updates when background checks save results.
 - Store manuscript information locally, without an application account, analytics service, or email-monitoring integration.
 - Export manuscript records, tracking sources, status/reviewer histories, and the check interval to a user-selected JSON backup; restore after validation and explicit replacement confirmation. Passwords and browser sessions are never exported.
 
