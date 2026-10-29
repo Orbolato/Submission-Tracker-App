@@ -81,16 +81,17 @@ class MonitorWorker(context: Context, params: WorkerParameters) : CoroutineWorke
 object MonitorScheduler {
     private const val WORK_NAME = "journal_status_checks"
     fun schedule(context: Context) {
-        val hours = SubmissionStore.intervalHours(context)
+        val minutes = SubmissionStore.intervalMinutes(context)
         val constraint = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-        val request = PeriodicWorkRequestBuilder<MonitorWorker>(hours, TimeUnit.HOURS)
+        val request = PeriodicWorkRequestBuilder<MonitorWorker>(minutes, TimeUnit.MINUTES)
             .setConstraints(constraint)
             .build()
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, request
         )
     }
-    fun checkNow(context: Context, id: String? = null, sourceUrl: String? = null) {
+    /** Return the queued WorkManager ID so the UI can refresh on completion. */
+    fun checkNow(context: Context, id: String? = null, sourceUrl: String? = null): java.util.UUID {
         val constraint = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
         val request = OneTimeWorkRequestBuilder<MonitorWorker>()
             .setConstraints(constraint)
@@ -99,5 +100,6 @@ object MonitorScheduler {
                     "onlyId" to id, "onlySourceUrl" to sourceUrl))
             }.build()
         WorkManager.getInstance(context).enqueue(request)
+        return request.id
     }
 }

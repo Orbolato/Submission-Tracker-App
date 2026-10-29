@@ -22,6 +22,9 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Observer
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import java.text.DateFormat
 import java.util.Date
 
@@ -32,6 +35,37 @@ class MainActivity : ComponentActivity() {
     private val light = Color.rgb(245, 249, 252)
     private val gray = Color.rgb(91, 107, 122)
     private var opened = false
+    private var dashboardScroll: ScrollView? = null
+
+    /**
+     * A check is asynchronous: observe precisely the work we started rather
+     * than redrawing immediately or guessing how long publisher pages take.
+     */
+    private fun checkAndRefresh(
+        manuscriptId: String? = null,
+        sourceUrl: String? = null,
+        onComplete: (() -> Unit)? = null
+    ) {
+        val workId = MonitorScheduler.checkNow(this, manuscriptId, sourceUrl)
+        val liveData = WorkManager.getInstance(this).getWorkInfoByIdLiveData(workId)
+        val observer = object : Observer<WorkInfo?> {
+            override fun onChanged(info: WorkInfo?) {
+                if (info == null || !info.state.isFinished) return
+                liveData.removeObserver(this)
+                if (isFinishing || isDestroyed) return
+                // A completed worker may have saved a status, reviewer count,
+                // source-specific error, or simply a failed login.
+                draw()
+                onComplete?.invoke()
+                if (info.state != WorkInfo.State.SUCCEEDED) {
+                    Toast.makeText(this@MainActivity,
+                        "Website check did not complete. Try again when connected.",
+                        Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        liveData.observe(this, observer)
+    }
 
     private val backupDocument = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -164,6 +198,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun draw() {
+        val previousScrollY = dashboardScroll?.scrollY ?: 0
         val items = SubmissionStore.all(this).sortedWith(compareBy<Manuscript> { it.journal }.thenBy { it.title })
         val scroll = ScrollView(this)
         scroll.setBackgroundColor(light)
@@ -173,6 +208,8 @@ class MainActivity : ComponentActivity() {
         }
         scroll.addView(container)
         setContentView(scroll)
+        dashboardScroll = scroll
+        scroll.post { scroll.scrollTo(0, previousScrollY) }
         keepContentInsideSystemBars(scroll)
 
         Line(text("Manuscript Watch", 28f, bold = true, color = navy), container)
@@ -180,17 +217,16 @@ class MainActivity : ComponentActivity() {
         val overview = card()
         val active = items.count { !it.currentStatus.contains("accept", true) && !it.currentStatus.contains("reject", true) }
         Line(text("${items.size} manuscripts  •  $active not marked final", 16f, bold = true), overview)
-        Line(text("Background check: every ${SubmissionStore.intervalHours(this)} hours, when Android allows", 12f, color = gray), overview, 6)
+        Line(text("Background check: every ${SubmissionStore.intervalLabel(SubmissionStore.intervalMinutes(this))} (best effort; Android may delay)", 12f, color = gray), overview, 6)
         Line(text("To connect a manuscript, open its journal, sign in, and select the page showing its status. No HTML settings needed.", 12f, color = gray), overview, 4)
         container.addView(overview, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
 
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         actions.addView(pillButton("+ Add paper") { editManuscript(null) }, LinearLayout.LayoutParams(0, -2, 1f))
         actions.addView(pillButton("Check now") {
-            MonitorScheduler.checkNow(this)
-            Toast.makeText(this, "Website checks queued. Tap Refresh afterward.", Toast.LENGTH_LONG).show()
+            checkAndRefresh()
+            Toast.makeText(this, "Checking manuscripts. Results update automatically.", Toast.LENGTH_LONG).show()
         }, LinearLayout.LayoutParams(0, -2, 1f))
-        actions.addView(pillButton("Refresh") { draw() }, LinearLayout.LayoutParams(0, -2, 0.75f))
         container.addView(actions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
 
         val options = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -256,8 +292,8 @@ class MainActivity : ComponentActivity() {
             val topButtons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             topButtons.addView(pillButton("Open journal") { openSite(item) }, LinearLayout.LayoutParams(0, -2, 1f))
             topButtons.addView(pillButton("Check") {
-                MonitorScheduler.checkNow(this, item.id)
-                Toast.makeText(this, "Check queued", Toast.LENGTH_SHORT).show()
+                checkAndRefresh(item.id)
+                Toast.makeText(this, "Checking manuscript. Results update automatically.", Toast.LENGTH_SHORT).show()
             }, LinearLayout.LayoutParams(0, -2, 1f))
             topButtons.addView(pillButton("History") { history(item) }, LinearLayout.LayoutParams(0, -2, 1f))
             c.addView(topButtons, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(9) })
@@ -334,13 +370,57 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun chooseInterval() {
-        val values = longArrayOf(1, 3, 6, 12, 24)
+        val presets = longArrayOf(15, 30, 60, 180, 360, 720, 1440)
+        val choices = presets.map { SubmissionStore.intervalLabel(it) } + "Custom interval (minutes)…"
+        val current = SubmissionStore.intervalMinutes(this)
         AlertDialog.Builder(this).setTitle("Background check interval")
-            .setSingleChoiceItems(values.map { "$it hour${if (it > 1) "s" else ""}" }.toTypedArray(),
-                values.indexOf(SubmissionStore.intervalHours(this))) { dialog, which ->
-                SubmissionStore.setIntervalHours(this, values[which]); MonitorScheduler.schedule(this)
-                dialog.dismiss(); draw()
-            }.setNegativeButton("Cancel", null).show()
+            .setSingleChoiceItems(choices.toTypedArray(), presets.indexOf(current)) { dialog, which ->
+                dialog.dismiss()
+                if (which == presets.size) {
+                    chooseCustomInterval(current)
+                } else {
+                    SubmissionStore.setIntervalMinutes(this, presets[which])
+                    MonitorScheduler.schedule(this)
+                    draw()
+                }
+            }
+            .setNegativeButton("Cancel", null).show()
+    }
+
+    private fun chooseCustomInterval(current: Long) {
+        val field = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setSingleLine(true)
+            setText(current.toString())
+            selectAll()
+            hint = "Minutes (15–10080)"
+        }
+        val wrapper = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+            addView(text("Choose 15 to 10080 minutes (7 days). " +
+                "Android may delay periodic checks, particularly with battery optimization.", 12f, color = gray))
+            addView(field)
+        }
+        val dialog = AlertDialog.Builder(this).setTitle("Custom check interval")
+            .setView(wrapper)
+            .setPositiveButton("Save", null)
+            .setNegativeButton("Cancel", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val minutes = field.text.toString().trim().toLongOrNull()
+                if (minutes == null ||
+                    minutes !in SubmissionStore.MIN_INTERVAL_MINUTES..SubmissionStore.MAX_INTERVAL_MINUTES) {
+                    field.error = "Enter a whole number between 15 and 10080."
+                    return@setOnClickListener
+                }
+                SubmissionStore.setIntervalMinutes(this, minutes)
+                MonitorScheduler.schedule(this)
+                dialog.dismiss()
+                draw()
+            }
+        }
+        dialog.show()
     }
 
     private fun openSite(item: Manuscript) {
@@ -393,9 +473,7 @@ class MainActivity : ComponentActivity() {
                 "Your private links stay on this device.", 12f, color = gray))
             addView(entry)
         }
-        val refresh = pillButton("Refresh tracking results") { /* wired after the list is defined */ }
         val savedLinks = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        content.addView(refresh)
         content.addView(text("Saved tracking sources:", 12f, bold = true),
             LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
         content.addView(savedLinks)
@@ -418,8 +496,10 @@ class MainActivity : ComponentActivity() {
                 if (source.lastError.isNotBlank())
                     savedLinks.addView(text("Attention: ${source.lastError}", 11f, color = Color.rgb(160, 77, 34)))
                 savedLinks.addView(pillButton("Check ${source.kind.title}") {
-                    MonitorScheduler.checkNow(this, item.id, source.url)
-                    Toast.makeText(this, "Check queued. Tap Refresh tracking results after it finishes.", Toast.LENGTH_LONG).show()
+                    checkAndRefresh(item.id, source.url) {
+                        if (shownDialog?.isShowing == true) repaint()
+                    }
+                    Toast.makeText(this, "Checking source. Results update automatically.", Toast.LENGTH_SHORT).show()
                 })
                 savedLinks.addView(pillButton("Open tracking page") {
                     startActivity(Intent(this, BrowserActivity::class.java).apply {
@@ -439,7 +519,6 @@ class MainActivity : ComponentActivity() {
                 })
             }
         }
-        refresh.setOnClickListener { repaint(); draw() }
         val scroll = ScrollView(this).apply { addView(content) }
         val dialog = AlertDialog.Builder(this)
             .setTitle("Tracking links for ${item.manuscriptId}")

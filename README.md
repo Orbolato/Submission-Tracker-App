@@ -16,8 +16,9 @@ The current implementation focuses on **Springer Nature** and **Elsevier / Edito
 - Open a journal's website inside the app and save its manuscript-status page with **Track page**, without entering HTML or CSS selectors.
 - Read supported status pages, including JavaScript-rendered Springer Nature submission-detail pages, using the app's authenticated WebView session.
 - Preserve a local status history and send Android notifications when a website check detects a change.
-- Schedule checks with Android WorkManager (selectable intervals of 1, 3, 6, 12, or 24 hours; default: 3 hours).
+- Schedule best-effort checks with Android WorkManager using presets of 15 or 30 minutes, 1, 3, 6, 12, or 24 hours, or a custom interval of 15–10,080 minutes (default: 3 hours). Android may delay periodic checks.
 - Optionally store ORCID credentials encrypted with Android Keystore for **user-triggered** autofill on verified ORCID login pages.
+- Manual **Check** actions refresh the dashboard and tracking-source details automatically when the background check completes.
 - Store manuscript information locally, without an application account, analytics service, or email-monitoring integration.
 - Export manuscript records, tracking sources, status/reviewer histories, and the check interval to a user-selected JSON backup; restore after validation and explicit replacement confirmation. Passwords and browser sessions are never exported.
 
@@ -40,7 +41,7 @@ Manuscript status monitoring is **best effort**. Android may delay periodic chec
 
 From the dashboard, select **Backup records**, confirm that the file contains sensitive manuscript information, and choose a private storage location using Android's document picker. To recover data, select **Restore records**, choose a JSON backup, review the manuscript count, and explicitly confirm replacement.
 
-**Restoring replaces the entire set of locally saved manuscripts**, including per-source observations and histories. It is not a merge. The app validates the backup's format, size (2 MB limit), manuscript identifiers, and tracking URLs before writing it. Keep a second copy of an existing backup before trying restore for the first time. Do not uninstall your existing app just to test restore.
+**Restoring replaces the entire set of locally saved manuscripts**, including per-source observations and histories. It is not a merge. The app validates the backup's format, size (2 MB limit), manuscript identifiers, and tracking URLs before writing it. New backups preserve minute-based check intervals, while backups from v0.2.0 using hourly intervals remain restorable. Keep a second copy of an existing backup before trying restore for the first time. Do not uninstall your existing app just to test restore.
 
 Backups are **not encrypted**. They may include manuscript identifiers, journal and tracking URLs (including private tokens embedded in URLs), statuses, and review histories. Store them securely and do not upload them to public repositories or issue trackers. **ORCID credentials, Android Keystore keys, browser cookies, and publisher sessions are excluded**; after moving to a different phone, sign in to journal websites again. Android automatic app backup remains disabled.
 

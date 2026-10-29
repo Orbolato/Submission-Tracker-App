@@ -37,15 +37,35 @@ object SubmissionStore {
     private val lock = Any()
     private const val PREFS = "manuscript_watch_data"
     private const val ENTRIES = "entries"
-    private const val INTERVAL = "interval_hours"
+    // Keep the legacy hours key for existing v0.2.0 installations and backups.
+    private const val LEGACY_INTERVAL = "interval_hours"
+    private const val INTERVAL_MINUTES = "interval_minutes"
+    const val MIN_INTERVAL_MINUTES = 15L
+    const val MAX_INTERVAL_MINUTES = 10080L // 7 days
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    fun intervalHours(context: Context): Long = prefs(context).getLong(INTERVAL, 3L)
+    fun intervalMinutes(context: Context): Long {
+        val settings = prefs(context)
+        val minutes = if (settings.contains(INTERVAL_MINUTES)) {
+            settings.getLong(INTERVAL_MINUTES, 180L)
+        } else {
+            settings.getLong(LEGACY_INTERVAL, 3L) * 60L
+        }
+        return minutes.coerceIn(MIN_INTERVAL_MINUTES, MAX_INTERVAL_MINUTES)
+    }
 
-    fun setIntervalHours(context: Context, hours: Long) {
-        require(hours in listOf(1L, 3L, 6L, 12L, 24L))
-        prefs(context).edit().putLong(INTERVAL, hours).apply()
+    fun intervalLabel(minutes: Long): String = when {
+        minutes % 1440L == 0L -> "${minutes / 1440L} day${if (minutes == 1440L) "" else "s"}"
+        minutes % 60L == 0L -> "${minutes / 60L} hour${if (minutes == 60L) "" else "s"}"
+        else -> "$minutes minutes"
+    }
+
+    fun setIntervalMinutes(context: Context, minutes: Long) {
+        require(minutes in MIN_INTERVAL_MINUTES..MAX_INTERVAL_MINUTES) {
+            "Choose an interval between 15 and 10080 minutes."
+        }
+        prefs(context).edit().putLong(INTERVAL_MINUTES, minutes).remove(LEGACY_INTERVAL).apply()
     }
 
     fun all(context: Context): List<Manuscript> = synchronized(lock) {
@@ -67,10 +87,12 @@ object SubmissionStore {
      * polling interval together so a concurrent check cannot see partial data.
      */
     internal fun replaceFromValidatedBackup(context: Context, entriesJson: String,
-                                            intervalHours: Long): Boolean = synchronized(lock) {
+                                            intervalMinutes: Long): Boolean = synchronized(lock) {
+        require(intervalMinutes in MIN_INTERVAL_MINUTES..MAX_INTERVAL_MINUTES)
         prefs(context).edit()
             .putString(ENTRIES, entriesJson)
-            .putLong(INTERVAL, intervalHours)
+            .putLong(INTERVAL_MINUTES, intervalMinutes)
+            .remove(LEGACY_INTERVAL)
             .commit()
     }
 
