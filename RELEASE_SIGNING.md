@@ -4,7 +4,7 @@ Manuscript Watch uses the Android application ID `org.manuscriptwatch.app`. Andr
 
 ## Current release
 
-GitHub's **v0.2.0** release contains tagged **source code only**. The automatic build workflow produces an experimental `app-debug.apk`, not a production release. The current source version is `0.2.0`, `versionCode = 17`.
+GitHub releases are **source code only**, including v0.2.2. The automatic build workflow produces an experimental `app-debug.apk`, not a production release. The current source version is `0.2.2`, `versionCode = 19`.
 
 **Do not publish a debug artifact as a production-signed APK.** The GitHub Actions debug signing key can differ from the key used by a local Android Studio installation and even from other CI runs.
 
