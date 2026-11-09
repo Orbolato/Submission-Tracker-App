@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [main, feature/v0.2.0, feature/auto-refresh-check]
+    branches: [main, feature/v0.2.0, feature/auto-refresh-check, feature/verified-periodic-retries]
   workflow_dispatch:
 
 permissions:

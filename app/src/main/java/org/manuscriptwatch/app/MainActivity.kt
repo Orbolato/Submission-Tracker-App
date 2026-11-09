@@ -3,12 +3,15 @@ package org.manuscriptwatch.app
 import android.Manifest
 import android.app.AlertDialog
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
@@ -36,6 +39,23 @@ class MainActivity : ComponentActivity() {
     private val gray = Color.rgb(91, 107, 122)
     private var opened = false
     private var dashboardScroll: ScrollView? = null
+    private var dashboardVisible = false
+    private val refreshHandler = Handler(Looper.getMainLooper())
+    private var trackingDialogRefresh: (() -> Unit)? = null
+    private val refreshUi = Runnable {
+        if (dashboardVisible && opened && !isFinishing && !isDestroyed) {
+            draw()
+            trackingDialogRefresh?.invoke()
+        }
+    }
+    // WorkManager can finish while the dashboard remains visible: a status
+    // write should update the UI without requiring the user to reopen the app.
+    private val manuscriptChanges = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == "entries") {
+            refreshHandler.removeCallbacks(refreshUi)
+            refreshHandler.postDelayed(refreshUi, 400L)
+        }
+    }
 
     /**
      * A check is asynchronous: observe precisely the work we started rather
@@ -59,7 +79,7 @@ class MainActivity : ComponentActivity() {
                 onComplete?.invoke()
                 if (info.state != WorkInfo.State.SUCCEEDED) {
                     Toast.makeText(this@MainActivity,
-                        "Website check did not complete. Try again when connected.",
+                        "Some tracking pages could not be verified. Check tracking links and login.",
                         Toast.LENGTH_LONG).show()
                 }
             }
@@ -155,9 +175,24 @@ class MainActivity : ComponentActivity() {
         draw()
     }
 
+    override fun onStart() {
+        super.onStart()
+        dashboardVisible = true
+        getSharedPreferences("manuscript_watch_data", MODE_PRIVATE)
+            .registerOnSharedPreferenceChangeListener(manuscriptChanges)
+    }
+
     override fun onResume() {
         super.onResume()
         if (opened) draw()
+    }
+
+    override fun onStop() {
+        dashboardVisible = false
+        getSharedPreferences("manuscript_watch_data", MODE_PRIVATE)
+            .unregisterOnSharedPreferenceChangeListener(manuscriptChanges)
+        refreshHandler.removeCallbacks(refreshUi)
+        super.onStop()
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
@@ -492,7 +527,11 @@ class MainActivity : ComponentActivity() {
                 val checkTime = source.lastAttempted.takeIf { it != 0L }?.let {
                     DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it))
                 } ?: "Never"
-                savedLinks.addView(text("Last check: $checkTime", 11f, color = gray))
+                savedLinks.addView(text("Last attempt: $checkTime", 11f, color = gray))
+                val verified = source.lastChecked.takeIf { it != 0L }?.let {
+                    DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it))
+                } ?: "Never"
+                savedLinks.addView(text("Last verified status: $verified", 11f, color = gray))
                 if (source.lastError.isNotBlank())
                     savedLinks.addView(text("Attention: ${source.lastError}", 11f, color = Color.rgb(160, 77, 34)))
                 savedLinks.addView(pillButton("Check ${source.kind.title}") {
@@ -526,6 +565,11 @@ class MainActivity : ComponentActivity() {
             .setPositiveButton("Add link", null)
             .setNegativeButton("Close", null).create()
         shownDialog = dialog
+        val dialogRefresh: () -> Unit = { if (shownDialog?.isShowing == true) repaint() }
+        trackingDialogRefresh = dialogRefresh
+        dialog.setOnDismissListener {
+            if (trackingDialogRefresh === dialogRefresh) trackingDialogRefresh = null
+        }
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val url = entry.text.toString().trim()
