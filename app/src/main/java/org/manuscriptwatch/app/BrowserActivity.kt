@@ -175,10 +175,24 @@ class BrowserActivity : ComponentActivity() {
                     val issue = parsed as ExtractResult.NeedsAttention
                     issue.reviewProgress?.let { SubmissionStore.observeReviewProgress(this, record.id, source, it) }
                     SubmissionStore.recordSourceError(this, record.id, source, issue.reason)
-                    val reason = issue.reason
-                    pageHint.text = "Tracking page saved, but I couldn't read a clear status yet. " +
-                        "Wait until your manuscript and its current status are visible, then tap Track page again. Details: $reason"
-                    Toast.makeText(this, "Page saved, but status not yet recognized.", Toast.LENGTH_LONG).show()
+                    val progress = issue.reviewProgress
+                    if (progress != null && !progress.isEmpty()) {
+                        val details = listOfNotNull(
+                            progress.invitedLabel()?.let { "Invited: $it" },
+                            progress.accepted?.let { "Accepted: $it" },
+                            progress.reports?.let { "Reports received: $it" }
+                        ).joinToString(" · ")
+                        pageHint.text = "Reviewer progress saved ($details). " +
+                            "A current editorial status was not identified. " +
+                            "Open the submission status section and tap Track page again if needed."
+                        Toast.makeText(this, "Reviewer counts saved; editorial status not identified.",
+                            Toast.LENGTH_LONG).show()
+                    } else {
+                        pageHint.text = "Tracking page saved, but I couldn't read a clear status yet. " +
+                            "Wait until your manuscript and its current status are visible, then tap Track page again. Details: ${issue.reason}"
+                        Toast.makeText(this, "Page saved, but status not yet recognized.",
+                            Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         }
