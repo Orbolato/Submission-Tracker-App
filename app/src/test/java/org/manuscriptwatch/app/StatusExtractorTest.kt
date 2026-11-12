@@ -76,6 +76,38 @@ class StatusExtractorTest {
         assertEquals(null, parsed.reviewProgress?.reports)
     }
 
+    @Test fun springerScreenshotCountsAreAvailableEvenWhenStatusIsNotVisible() {
+        val news = """
+            <section>
+              <h2>News about your peer review process</h2>
+              <ul>
+                <li>The editor has invited more than 10 reviewer(s)</li>
+                <li>There is 1 reviewer(s) that has accepted to review your manuscript</li>
+                <li>The editor has received 1 reviewer report(s)</li>
+              </ul>
+            </section>
+        """.trimIndent()
+        val url = "https://submission.springernature.com/submission-details/11111111-2222-4333-8444-555555555555"
+
+        // When the current-status heading has not rendered, counts must still
+        // be saved as partial reviewer progress rather than invented status.
+        val withoutStatus = StatusExtractor.extract(
+            "<html><body>$news</body></html>", "DEMO-26-1", "", url
+        ) as ExtractResult.NeedsAttention
+        assertEquals("11+", withoutStatus.reviewProgress?.invitedLabel())
+        assertEquals(1, withoutStatus.reviewProgress?.accepted)
+        assertEquals(1, withoutStatus.reviewProgress?.reports)
+
+        // When the status is visible, it must travel with the same counts.
+        val withStatus = StatusExtractor.extract(
+            "<html><body><h2>Your submission is in peer review</h2>$news</body></html>",
+            "DEMO-26-1", "", url
+        ) as ExtractResult.Found
+        assertEquals("Your submission is in peer review", withStatus.status)
+        assertEquals("11+", withStatus.reviewProgress?.invitedLabel())
+        assertEquals(1, withStatus.reviewProgress?.reports)
+    }
+
     @Test fun editorialManagerIgnoresLegacySelectorThatNoLongerMatches() {
         val page = """<table>
             <tr><th>Manuscript Number</th><th>Current Status</th></tr>

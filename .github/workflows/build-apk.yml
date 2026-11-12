@@ -3,6 +3,8 @@ name: Build Android APK
 on:
   push:
     branches: [main, feature/v0.2.0, feature/auto-refresh-check, feature/verified-periodic-retries]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:

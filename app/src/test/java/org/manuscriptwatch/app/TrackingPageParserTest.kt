@@ -155,6 +155,47 @@ class TrackingPageParserTest {
         assertEquals(1, progress.reports)
     }
 
+    @Test fun springerScreenshotMoreThanTenInvitedAndOneReportReceived() {
+        // Exact publisher wording visible in the 12 Nov 2026 screenshot.
+        val html = """
+            <html><body><section>
+              <h2>News about your peer review process</h2>
+              <ul>
+                <li>The editor has invited more than 10 reviewer(s)</li>
+                <li>There is 1 reviewer(s) that has accepted to review your manuscript</li>
+                <li>The editor has received 1 reviewer report(s)</li>
+              </ul>
+              <p>After the editor has collated and reviewed all the reports they need,
+              which may involve seeking additional reviews, you'll be notified about their decision.</p>
+            </section></body></html>
+        """.trimIndent()
+        val progress = TrackingPageParser.springerReviewProgress(html)!!
+        // "More than 10" means 11 or more, not exactly 10.
+        assertEquals(11, progress.invited)
+        assertTrue(progress.invitedAtLeast)
+        assertEquals("11+", progress.invitedLabel())
+        assertEquals(1, progress.accepted)
+        assertEquals(1, progress.reports)
+        assertEquals("1", progress.completedLabel())
+    }
+
+    @Test fun springerInvitedAtLeastAndExactRemainDistinct() {
+        val atLeast = TrackingPageParser.springerReviewProgress(
+            "<body><li>The editor has invited at least 10 reviewer(s)</li></body>")!!
+        assertEquals("10+", atLeast.invitedLabel())
+        val exact = TrackingPageParser.springerReviewProgress(
+            "<body><li>The editor has invited 10 reviewer(s)</li></body>")!!
+        assertEquals("10", exact.invitedLabel())
+    }
+
+    @Test fun springerDoesNotInferReceivedReportsFromFutureOrHypotheticalLanguage() {
+        val progress = TrackingPageParser.springerReviewProgress(
+            "<body><ul><li>The editor has invited more than 10 reviewer(s)</li></ul>" +
+            "<p>After the editor has received the reports they need, " +
+            "you will be notified of their decision.</p></body>")!!
+        assertNull(progress.reports)
+    }
+
     @Test fun springerAbsentReviewerReportCountRemainsUnknown() {
         val html = "<body><li>The editor has invited 6 reviewer(s)</li>" +
             "<li>There is 1 reviewer(s) that has accepted to review your manuscript</li>" +

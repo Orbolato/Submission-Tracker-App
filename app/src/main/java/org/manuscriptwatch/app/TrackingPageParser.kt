@@ -63,6 +63,8 @@ object TrackingPageParser {
      * SNAPP's author-facing reviewer summary uses sentences rather than labeled fields:
      * "The editor has invited 6 reviewer(s)"
      * "There is 1 reviewer(s) that has accepted to review your manuscript"
+     * "The editor has invited more than 10 reviewer(s)"
+     * "The editor has received 1 reviewer report(s)"
      *
      * Only count statements explicitly present in the manuscript's own detail page.
      * In particular, narrative mentioning "reports" does NOT establish that any
@@ -72,14 +74,18 @@ object TrackingPageParser {
         val generic = reviewProgress(html)
         val doc = Jsoup.parse(html)
         val invitedSentence = Regex(
-            """(?i)^the editor has invited\s+(\d{1,3})(\+?)\s+reviewer(?:\(s\)|s)?(?:\s+to review(?:\s+your manuscript)?)?\.?$"""
+            """(?i)^the editor has invited\s+(?:(more\s+than|at\s+least)\s+)?(\d{1,3})(\+?)\s+reviewer(?:\(s\)|s)?(?:\s+to review(?:\s+your manuscript)?)?\.?$"""
         )
         val acceptedSentence = Regex(
             """(?i)^there (?:is|are)\s+(\d{1,3})\s+reviewer(?:\(s\)|s)?\s+(?:that|who)\s+(?:has|have)\s+accepted(?:\s+to review(?:\s+your manuscript)?)?\.?$"""
         )
+        val reportsSentence = Regex(
+            """(?i)^the editor has received\s+(\d{1,3})\s+reviewer\s+report(?:\(s\)|s)?\.?$"""
+        )
         var invited: Int? = null
         var atLeast = false
         var accepted: Int? = null
+        var reports: Int? = null
 
         // Prefer compact list items/paragraphs. Avoid scanning whole-page text for
         // bare numbers, which could refer to an unrelated submission or help text.
@@ -88,15 +94,26 @@ object TrackingPageParser {
             if (text.length !in 25..170) continue
             val invitedMatch = invitedSentence.matchEntire(text)
             if (invitedMatch != null) {
-                invited = invitedMatch.groupValues[1].toInt()
-                atLeast = invitedMatch.groupValues[2] == "+"
+                val count = invitedMatch.groupValues[2].toInt()
+                val qualifier = invitedMatch.groupValues[1].lowercase()
+                // "More than 10" means at least 11, never exactly 10 or 10+.
+                // An exact 999+ threshold has no representable 3-digit lower bound.
+                if (qualifier != "more than" || count < 999) {
+                    invited = if (qualifier == "more than") count + 1 else count
+                    atLeast = qualifier.isNotBlank() || invitedMatch.groupValues[3] == "+"
+                }
             }
             val acceptedMatch = acceptedSentence.matchEntire(text)
             if (acceptedMatch != null) {
                 accepted = acceptedMatch.groupValues[1].toInt()
             }
+            val reportsMatch = reportsSentence.matchEntire(text)
+            if (reportsMatch != null) {
+                reports = reportsMatch.groupValues[1].toInt()
+            }
         }
-        val sentences = ReviewProgress(invited = invited, invitedAtLeast = atLeast, accepted = accepted)
+        val sentences = ReviewProgress(invited = invited, invitedAtLeast = atLeast,
+            accepted = accepted, reports = reports)
         val combined = generic?.merge(sentences) ?: sentences
         return combined.takeUnless { it.isEmpty() }
     }
